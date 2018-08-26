@@ -1,36 +1,38 @@
 
 function Vait() {
-  let pass, fail
+  var pass, fail
 
-  const promise = new Promise((resolve, reject) => {
-    pass = function () {
-      resolve(...arguments)
+  var promise = new Promise(function(resolve, reject) {
+    pass = function() {
+      resolve.apply(null, arguments)
       return promise
     }
-    fail = function () {
-      reject(...arguments)
+    fail = function() {
+      reject.apply(null, arguments)
       return promise
     }
   })
 
-  return Object.assign(promise, {
-    pass,
-    fail,
-  })
+  promise.pass = pass
+  promise.fail = fail
+
+  return promise
 }
 
-module.exports = Object.assign(Vait, {
-  nextTick() {
-    return this.timeout(0)
-  },
+Vait.nextTick = function() {
+  return this.timeout(0)
+}
 
-  timeout(timing, value) {
-    const vait = Vait()
+Vait.timeout = function(timing, value) {
+  var vait = Vait()
 
-    const timeout_handle = setTimeout(vait.pass, timing, value)
+  var timeout_handle = setTimeout(vait.pass, timing, value)
 
-    vait.clear = () => clearTimeout(timeout_handle)
-
-    return vait
+  vait.clear = function() {
+    return clearTimeout(timeout_handle)
   }
-})
+
+  return vait
+}
+
+module.exports = Vait

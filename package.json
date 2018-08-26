@@ -1,6 +1,6 @@
 {
   "name": "vait",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "main": "src/vait.js",
   "repository": "git@github.com:TorzoClub/vait.git",
   "author": "vec <vec@torzo.club>",
