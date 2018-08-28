@@ -2,8 +2,16 @@
   "name": "vait",
   "version": "0.0.3",
   "main": "src/vait.js",
+  "scripts": {
+    "test": "ava ./test --verbose",
+    "test-watch": "ava ./test --watch"
+  },
   "repository": "git@github.com:TorzoClub/vait.git",
   "author": "vec <vec@torzo.club>",
   "license": "MIT",
-  "private": false
+  "private": false,
+  "devDependencies": {
+    "ava": "^0.25.0",
+    "coffeescript": "^2.3.1"
+  }
 }
