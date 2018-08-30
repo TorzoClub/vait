@@ -3,12 +3,14 @@ function Vait() {
   var pass, fail
 
   var promise = new Promise(function(resolve, reject) {
-    pass = function() {
-      resolve.apply(null, arguments)
+    pass = function(value) {
+      promise.__value__ = value
+      resolve(value)
       return promise
     }
-    fail = function() {
-      reject.apply(null, arguments)
+    fail = function(error) {
+      promise.__error__ = error
+      reject(error)
       return promise
     }
   })
