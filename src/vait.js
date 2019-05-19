@@ -4,17 +4,21 @@ function Vait() {
 
   var promise = new Promise(function(resolve, reject) {
     pass = function(value) {
+      promise.__finally__ = true
       promise.__value__ = value
       resolve(value)
       return promise
     }
+
     fail = function(error) {
+      promise.__finally__ = true
       promise.__error__ = error
       reject(error)
       return promise
     }
   })
 
+  promise.__finally__ = false
   promise.pass = pass
   promise.fail = fail
 

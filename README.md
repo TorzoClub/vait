@@ -78,6 +78,53 @@ v.clear()
 
 相当于调用 `vait.timeout(0)`
 
+## vait 实例中的 `__value__`、`__error__`、`__finally__`
+
+当 Promise resolve 后，`__value__` 为 resolve 的值。如果是 reject 的话，reject 的值将在 `__error__`。在上述两个情况发生之前，`__finally__` 都会是 `false`，否则为 `true`。
+
+```javascript
+const printVaitState = (title, v) => {
+  console.group(title)
+  console.log('__value__', v.__value__) // 返回 `undefined`
+  console.log('__error__', v.__error__) // 返回 `undefined`
+  console.log('__finally__', v.__finally__) // 返回 `false`
+  console.log(
+    'exist',
+    v.hasOwnProperty('__value__'),
+    v.hasOwnProperty('__error__'),
+    v.hasOwnProperty('__finally__')
+  )  // 返回 `false` `false` `true`
+  console.groupEnd(title)
+}
+
+const v = vait()
+printVaitState('initial', v)
+v.pass('hello')
+printVaitState('pass', v)
+
+const failV = vait()
+failV.fail(Error('error message'))
+printVaitState('fail', failV)
+
+// 输出结果:
+// initial
+//   __value__ undefined
+//   __error__ undefined
+//   __finally__ false
+//   exist false false true
+//
+// pass
+//   __value__ hello
+//   __error__ undefined
+//   __finally__ true
+//   exist true false true
+//
+// fail
+//   __value__ undefined
+//   __error__ Error: error message
+//   __finally__ true
+//   exist false true true
+```
 
 # LICENSE
 

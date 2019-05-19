@@ -64,3 +64,17 @@ test 'vait.nextTick', (t) ->
   time2 = Date.now()
 
   t.true(time2 > time1)
+
+
+test 'vait.__finally__', (t) ->
+  v = vait()
+
+  setTimeout ->
+    v.pass '9'
+  , 50
+
+  t.is v.__finally__, false
+
+  value = await v
+
+  t.is v.__finally__, true
