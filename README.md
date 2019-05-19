@@ -85,15 +85,15 @@ v.clear()
 ```javascript
 const printVaitState = (title, v) => {
   console.group(title)
-  console.log('__value__', v.__value__) // 返回 `undefined`
-  console.log('__error__', v.__error__) // 返回 `undefined`
-  console.log('__finally__', v.__finally__) // 返回 `false`
+  console.log('__value__', v.__value__)
+  console.log('__error__', v.__error__)
+  console.log('__finally__', v.__finally__)
   console.log(
     'exist',
     v.hasOwnProperty('__value__'),
     v.hasOwnProperty('__error__'),
     v.hasOwnProperty('__finally__')
-  )  // 返回 `false` `false` `true`
+  )
   console.groupEnd(title)
 }
 
