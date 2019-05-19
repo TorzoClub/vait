@@ -1,6 +1,6 @@
 {
   "name": "vait",
-  "version": "0.0.4",
+  "version": "0.1.0",
   "main": "src/vait.js",
   "scripts": {
     "test": "ava ./test --verbose",
