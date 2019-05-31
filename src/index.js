@@ -38,6 +38,12 @@ Object.assign(Vait, {
 
   nextTick() {
     return this.timeout(0)
+  },
+
+  wait(promise) {
+    const v = Vait()
+    promise.then(v.pass).catch(v.fail)
+    return v
   }
 })
 
