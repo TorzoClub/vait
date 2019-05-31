@@ -1,20 +1,18 @@
 'use strict';
 
-function vaitBase() {
+function Vait(input) {
   var pass, fail;
   var promise = new Promise(function (resolve, reject) {
     pass = function pass(value) {
       promise.__finally__ = true;
       promise.__value__ = value;
       resolve(value);
-      return promise;
     };
 
     fail = function fail(error) {
       promise.__finally__ = true;
       promise.__error__ = error;
       reject(error);
-      return promise;
     };
   });
   Object.assign(promise, {
@@ -26,35 +24,26 @@ function vaitBase() {
   return promise;
 }
 
-function Vait(input) {
-  if (input instanceof Promise) {
-    return Vait.connect(input);
+Object.assign(Vait, {
+  timeout: function timeout(timing, value) {
+    var v = Vait();
+    var timeout_handle = setTimeout(v.pass, timing, value);
+
+    v.clear = function () {
+      return clearTimeout(timeout_handle);
+    };
+
+    return v;
+  },
+  nextTick: function nextTick() {
+    return this.timeout(0);
+  },
+  wait: function wait(promise) {
+    var v = Vait();
+    promise.then(v.pass).catch(v.fail);
+    return v;
   }
-
-  return vaitBase();
-}
-
-Vait.connect = function (promise) {
-  var v = Vait();
-  promise.then(v.pass).catch(v.fail);
-  return v;
-};
-
-Vait.timeout = function (timing, value) {
-  var v = Vait();
-  var timeout_handle = setTimeout(v.pass, timing, value);
-
-  v.clear = function () {
-    return clearTimeout(timeout_handle);
-  };
-
-  return v;
-};
-
-Vait.nextTick = function () {
-  return Vait.timeout(0);
-};
-
+});
 var src = Vait;
 
 module.exports = src;
