@@ -27,16 +27,20 @@ function Vait(input) {
   return promise
 }
 
-Vait.timeout = (timing, value) => {
-  const v = Vait()
+Object.assign(Vait, {
+  timeout(timing, value) {
+    const v = Vait()
 
-  const timeout_handle = setTimeout(v.pass, timing, value)
+    const timeout_handle = setTimeout(v.pass, timing, value)
 
-  v.clear = () => clearTimeout(timeout_handle)
+    v.clear = () => clearTimeout(timeout_handle)
 
-  return v
-}
+    return v
+  },
 
-Vait.nextTick = () => Vait.timeout(0)
+  nextTick() {
+    return this.timeout(0)
+  }
+})
 
 module.exports = Vait
