@@ -6,14 +6,12 @@ function Vait(input) {
       promise.__finally__ = true
       promise.__value__ = value
       resolve(value)
-      return promise
     }
 
     fail = error => {
       promise.__finally__ = true
       promise.__error__ = error
       reject(error)
-      return promise
     }
   })
 
