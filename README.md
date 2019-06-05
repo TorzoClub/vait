@@ -59,7 +59,7 @@ setTimeout(() => {
 
 # API
 
-## timeout
+## vait.timeout()
 
 `setTimeout` 的 Promise 封装
 
@@ -74,9 +74,11 @@ const v = vait.timeout(1000)
 v.clear()
 ```
 
-## nextTick
+
+## vait.nextTick()
 
 相当于调用 `vait.timeout(0)`
+
 
 ## vait 实例中的 `__value__`、`__error__`、`__finally__`
 
@@ -124,6 +126,21 @@ printVaitState('fail', failV)
 //   __error__ Error: error message
 //   __finally__ true
 //   exist false true true
+```
+
+
+## vait.wait()
+
+等待一个 Promise 的完成。
+
+```javascript
+const timeoutV = vait.timeout(1000)
+const timeoutWaitV = vait.wait(timeoutV)
+
+timeoutWaitV.then(() => {
+  conosle.log("1000ms after")
+})
+
 ```
 
 # LICENSE
