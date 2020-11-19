@@ -1,34 +1,29 @@
-import nodeResolve from 'rollup-plugin-node-resolve'
-import cjs from 'rollup-plugin-commonjs'
-import babel from 'rollup-plugin-babel'
+import pkg from './package.json'
+import cjs from '@rollup/plugin-commonjs'
+import typescript from "@rollup/plugin-typescript"
 
 export default {
-  input: 'src/index.js',
-
+  input: './src/index.ts',
   output: [
     {
-      file: 'dist/vait.esm.js',
-      format: 'es',
-      sourcemap: true,
-      name: 'Vait'
+      format: 'cjs',
+      file: pkg.main,
+      sourcemap: true
     },
     {
-      file: 'dist/vait.common.js',
-      format: 'cjs',
-      sourcemap: true,
-      name: 'Vait'
+      format: 'es',
+      file: pkg.module,
+      sourcemap: true
     }
   ],
-
   plugins: [
-    nodeResolve(),
-
-    cjs({
-      namedExports: { './vait.common.js': ['Vait', 'bar' ] }
+    typescript({
+      exclude: 'node_modules/**',
+      typescript: require('typescript')
     }),
-
-    babel({
-      exclude: 'node_modules/**'
+    
+    cjs({
+      extensions: ['.js', '.ts']
     })
-  ]
-}
+  ],
+};
