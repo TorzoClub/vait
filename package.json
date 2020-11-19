@@ -1,8 +1,9 @@
 {
   "name": "vait",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "main": "dist/vait.common.js",
   "module": "dist/vait.esm.js",
+  "typings": "types/index.d.ts",
   "scripts": {
     "test": "ava ./test --verbose",
     "test-watch": "ava ./test --watch",
