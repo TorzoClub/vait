@@ -1,17 +1,25 @@
 {
   "name": "vait",
-  "version": "0.1.0",
-  "main": "src/vait.js",
+  "version": "0.2.1",
+  "main": "dist/vait.common.js",
+  "module": "dist/vait.esm.js",
   "scripts": {
     "test": "ava ./test --verbose",
-    "test-watch": "ava ./test --watch"
+    "test-watch": "ava ./test --watch",
+    "build": "rollup -c rollup.config.js"
   },
   "repository": "git@github.com:TorzoClub/vait.git",
   "author": "vec <vec@torzo.club>",
   "license": "MIT",
   "private": false,
   "devDependencies": {
+    "@rollup/plugin-commonjs": "^16.0.0",
+    "@rollup/plugin-typescript": "^6.1.0",
     "ava": "^0.25.0",
-    "coffeescript": "^2.3.1"
+    "rollup": "^2.33.3",
+    "typescript": "^4.0.5"
+  },
+  "dependencies": {
+    "depd": "^1.1.2"
   }
 }
