@@ -1,12 +1,13 @@
 {
   "name": "vait",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "main": "dist/vait.common.js",
   "module": "dist/vait.esm.js",
   "scripts": {
     "test": "ava ./test --verbose",
     "test-watch": "ava ./test --watch",
-    "build": "rollup -c rollup.config.js"
+    "build": "rollup -c rollup.config.js",
+    "build:type": "tsc -p ./tsconfig.type.json"
   },
   "repository": "git@github.com:TorzoClub/vait.git",
   "author": "vec <vec@torzo.club>",
