@@ -15,7 +15,7 @@ npm install --save vait
 
 ```javascript
   import { timeout } from 'vait'
-  (async iife() => {
+  (async function iife() {
     await timeout(1000)
     console.log('hello after 1000ms')
   })()
@@ -61,4 +61,20 @@ lock.then(str => {
 unlock('hello, world') // 支持一个参数传入
 
 unlock() // 因为是调用了 Promise resolve，所以前面 console.log(str) 只会执行一次
+```
+
+```javascript
+// 一个卡住运行时的用法
+import { Lock } from 'vait'
+
+const [lock, unlock] = Lock()
+
+;(async () => {
+  console.log('accept value is:', await lock)
+})()
+
+setTimeout(() => {
+  // 一秒后才会出现 accept value is: 3.1415926
+  unlock(3.1415926)
+}, 1000)
 ```
