@@ -1,5 +1,5 @@
 
-一个 Promise 相关的轮子。
+异步编程的一些实用函数。
 
 ------
 
@@ -14,135 +14,67 @@ npm install --save vait
 # 示例
 
 ```javascript
-global.vait = require('vait')
-
-const v = vait()
-
-v.then(str => {
-  // 如果不执行 v.pass, 此函数将永远不会执行
-  console.log(str)
-})
-
-
-v.pass('hello, world') // 支持一个参数传入
-
-v.pass() // 因为是调用了 Promise resolve，所以 console.log('hello') 只会执行一次
+  import { timeout } from 'vait'
+  (async function iife() {
+    await timeout(1000)
+    console.log('hello after 1000ms')
+  })()
 ```
 
 ```javascript
-// 抛出错误
-const v = vait()
+import { Atomic, timeout } from 'vait'
+const atomic = Atomic()
 
-v.catch(err => {
-  // 此处的 err 为下面的 new Error('fail')
-  console.warn(err)
+function randomNumber(range) {
+  Math.floor(Math.random() * range);
+}
+
+atomic(async () => {
+  await timeout(randomNumber(100))
+  console.log('step one')
+})
+atomic(async () => {
+  await timeout(randomNumber(100))
+  console.log('step two')
+})
+atomic(async () => {
+  await timeout(randomNumber(100))
+  console.log('step three')
 })
 
-v.fail(new Error('fail'))
+// output: 
+//   step one
+//   step two
+//   step three
+```
+
+```javascript
+import { Lock } from 'vait'
+
+const [lock, unlock] = Lock()
+
+lock.then(str => {
+  // 如果不执行 unlock, 此函数将永远不会执行
+  console.log(str)
+})
+
+unlock('hello, world') // 支持一个参数传入
+
+unlock() // 因为是调用了 Promise resolve，所以前面 console.log(str) 只会执行一次
 ```
 
 ```javascript
 // 一个卡住运行时的用法
+import { Lock } from 'vait'
 
-const v = vait()
+const [lock, unlock] = Lock()
 
 ;(async () => {
-  console.log('accept value is:', await v)
+  console.log('accept value is:', await lock)
 })()
 
 setTimeout(() => {
   // 一秒后才会出现 accept value is: 3.1415926
-  v.pass(3.1415926)
+  unlock(3.1415926)
 }, 1000)
 ```
-
-
-# API
-
-## vait.timeout()
-
-`setTimeout` 的 Promise 封装
-
-```javascript
-// 一般写法
-vait.timeout(1000).then(() => {
-  console.log('hello')
-})
-
-// 取消定时器
-const v = vait.timeout(1000)
-v.clear()
-```
-
-
-## vait.nextTick()
-
-相当于调用 `vait.timeout(0)`
-
-
-## vait 实例中的 `__value__`、`__error__`、`__finally__`
-
-当 Promise resolve 后，`__value__` 为 resolve 的值。如果是 reject 的话，reject 的值将在 `__error__`。在上述两个情况发生之前，`__finally__` 都会是 `false`，否则为 `true`。
-
-```javascript
-const printVaitState = (title, v) => {
-  console.group(title)
-  console.log('__value__', v.__value__)
-  console.log('__error__', v.__error__)
-  console.log('__finally__', v.__finally__)
-  console.log(
-    'exist',
-    v.hasOwnProperty('__value__'),
-    v.hasOwnProperty('__error__'),
-    v.hasOwnProperty('__finally__')
-  )
-  console.groupEnd(title)
-}
-
-const v = vait()
-printVaitState('initial', v)
-v.pass('hello')
-printVaitState('pass', v)
-
-const failV = vait()
-failV.fail(Error('error message'))
-printVaitState('fail', failV)
-
-// 输出结果:
-// initial
-//   __value__ undefined
-//   __error__ undefined
-//   __finally__ false
-//   exist false false true
-//
-// pass
-//   __value__ hello
-//   __error__ undefined
-//   __finally__ true
-//   exist true false true
-//
-// fail
-//   __value__ undefined
-//   __error__ Error: error message
-//   __finally__ true
-//   exist false true true
-```
-
-
-## vait.wait()
-
-等待一个 Promise 的完成。
-
-```javascript
-const timeoutV = vait.timeout(1000)
-const timeoutWaitV = vait.wait(timeoutV)
-
-timeoutWaitV.then(() => {
-  conosle.log("1000ms after")
-})
-
-```
-
-# LICENSE
-
-MIT
