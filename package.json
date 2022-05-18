@@ -5,8 +5,7 @@
   "module": "dist/vait.esm.js",
   "typings": "types/index.d.ts",
   "scripts": {
-    "test": "ava ./test --verbose",
-    "test-watch": "ava ./test --watch",
+    "test": "jest",
     "build": "rollup -c rollup.config.js",
     "build:type": "tsc -p ./tsconfig.type.json"
   },
@@ -15,10 +14,14 @@
   "license": "MIT",
   "private": false,
   "devDependencies": {
+    "@babel/preset-env": "^7.17.12",
+    "@babel/preset-typescript": "^7.17.12",
     "@rollup/plugin-commonjs": "^16.0.0",
     "@rollup/plugin-typescript": "^6.1.0",
-    "ava": "^0.25.0",
+    "@types/jest": "^27.5.1",
+    "jest": "^28.1.0",
     "rollup": "^2.33.3",
+    "ts-node": "^10.7.0",
     "typescript": "^4.6.4"
   },
   "dependencies": {
