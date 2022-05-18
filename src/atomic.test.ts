@@ -84,6 +84,18 @@ test('Atomic sync', async () => {
   }
 })
 
+test('Atomic return value', async () => {
+  const atomic = Atomic()
+
+  expect(233).toBe(
+    await atomic(async () => 233)
+  )
+
+  expect('233').toBe(
+    await atomic(async () => '233')
+  )
+})
+
 test('Atomic timeout', async () => {
   const history: number[] = []
   const waiting: Promise<unknown>[] = []
