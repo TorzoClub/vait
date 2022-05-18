@@ -30,7 +30,44 @@ test('Atomic ignore error', async () => {
   expect(history).toEqual([2])
 })
 
-test.only('Atomic sync', async () => {
+test('Atomic error catch execute sequence', async () => {
+  const atomic = Atomic()
+
+  const history: number[] = []
+  const waiting: Promise<unknown>[] = []
+
+  async function createFailure() {
+    throw new Error('failure')
+  }
+
+  const failure = createFailure()
+
+  await expect(failure).rejects.toThrow()
+
+  waiting.push(
+    atomic(() => failure).catch(() => {
+      history.push(1)
+    })
+  )
+
+  waiting.push(
+    atomic(async () => {
+      history.push(2)
+    })
+  )
+
+  waiting.push(
+    atomic(async () => {
+      history.push(3)
+    })
+  )
+  
+  await Promise.all(waiting)
+  
+  expect(history).toEqual([1, 2, 3])
+})
+
+test('Atomic sync', async () => {
   const atomic = Atomic()
 
   const count = 1000
@@ -60,7 +97,7 @@ test('Atomic timeout', async () => {
   )
   waiting.push(
     atomic(async () => {
-      await timeout(3000)
+      await timeout(2000)
       history.push(2)
     })
   )

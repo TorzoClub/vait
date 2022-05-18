@@ -1,3 +1,5 @@
+import { timeout } from "./timeout"
+
 const createMemo = <Data extends unknown>(data: Data) => [
   () => data,
   (newData: Data) => { data = newData }
@@ -13,12 +15,15 @@ export function Atomic() {
     if (processing !== null) {
       try {
         await processing
-      } finally {
+        return atomic(task)
+      } catch {
+        await timeout(0)
         return atomic(task)
       }
     } else {
       const new_processing = task()
       setProcessing(new_processing)
+      
       try {
         await new_processing
       } finally {
