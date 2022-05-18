@@ -19,7 +19,7 @@
     "@rollup/plugin-typescript": "^6.1.0",
     "ava": "^0.25.0",
     "rollup": "^2.33.3",
-    "typescript": "^4.0.5"
+    "typescript": "^4.6.4"
   },
   "dependencies": {
     "depd": "^1.1.2"
