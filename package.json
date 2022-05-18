@@ -6,8 +6,9 @@
   "typings": "types/index.d.ts",
   "scripts": {
     "test": "jest",
-    "build": "rollup -c rollup.config.js",
-    "build:type": "tsc -p ./tsconfig.type.json"
+    "build:type": "tsc -p ./tsconfig.type.json",
+    "build:rollup": "rollup -c rollup.config.js",
+    "build": "yarn build:type && yarn build:rollup"
   },
   "repository": "git@github.com:TorzoClub/vait.git",
   "author": "vec <vec@torzo.club>",
