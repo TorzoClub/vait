@@ -19,7 +19,7 @@ export default {
   plugins: [
     typescript({
       exclude: 'node_modules/**',
-      typescript: require('typescript')
+      typescript: require('typescript'),
     }),
     
     cjs({
