@@ -1,6 +1,6 @@
 {
   "name": "vait",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "main": "./dist/vait.common.js",
   "module": "./dist/vait.esm.js",
   "typings": "./types/index.d.ts",
@@ -10,6 +10,11 @@
     "build:rollup": "rollup -c rollup.config.js",
     "build": "yarn build:type && yarn build:rollup"
   },
+  "files": [
+    "dist",
+    "src",
+    "types"
+  ],
   "repository": "git@github.com:TorzoClub/vait.git",
   "author": "vec <vec@torzo.club>",
   "license": "MIT",
