@@ -14,15 +14,16 @@ npm install --save vait
 # 示例
 
 ```javascript
-  import { timeout } from 'vait'
-  (async function iife() {
-    await timeout(1000)
-    console.log('hello after 1000ms')
-  })()
+import { timeout } from 'vait'
+
+timeout(1000).then(() => {
+  console.log('hello after 1000ms')
+})
 ```
 
 ```javascript
 import { Atomic, timeout } from 'vait'
+
 const atomic = Atomic()
 
 function randomNumber(range) {
@@ -42,7 +43,7 @@ atomic(async () => {
   console.log('step three')
 })
 
-// output: 
+// 永远按调用顺序输出：
 //   step one
 //   step two
 //   step three
