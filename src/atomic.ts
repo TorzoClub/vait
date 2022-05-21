@@ -1,4 +1,4 @@
-import { timeout } from "./timeout"
+import { nextTick } from './next-tick'
 
 const createMemo = <Data extends unknown>(data: Data) => [
   () => data,
@@ -17,7 +17,7 @@ export function Atomic() {
         await processing
         return atomic(task)
       } catch {
-        await timeout(0)
+        await nextTick()
         return atomic(task)
       }
     } else {
