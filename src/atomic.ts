@@ -24,6 +24,7 @@ export function Atomic() {
         await new_processing
       } finally {
         setProcessing(null)
+        // eslint-disable-next-line no-unsafe-finally
         return new_processing
       }
     }

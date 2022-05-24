@@ -1,7 +1,7 @@
 type Unlock<T> = 
 (() => void) | ((v?: T) => void)
 
-export function Lock<T extends unknown>() {
+export function Lock<T>() {
   let outterResolve: (value?: T) => void
   const lock = new Promise<T | void>((resolve) => {
     outterResolve = resolve
