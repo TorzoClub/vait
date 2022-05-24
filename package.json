@@ -8,7 +8,9 @@
     "test": "jest",
     "build:type": "rm -rf types/* && tsc -p ./tsconfig.type.json",
     "build:rollup": "rollup -c rollup.config.js",
-    "build": "yarn build:type && yarn build:rollup"
+    "build": "yarn build:type && yarn build:rollup",
+    "lint": "yarn eslint ./src/ --ext .js,.jsx,.ts,.tsx",
+    "lint-strict": "yarn lint --max-warnings 0"
   },
   "files": [
     "dist",
@@ -26,7 +28,11 @@
     "@rollup/plugin-commonjs": "^22.0.0",
     "@rollup/plugin-typescript": "^8.3.2",
     "@types/jest": "^27.5.1",
+    "@typescript-eslint/eslint-plugin": "^5.26.0",
+    "@typescript-eslint/parser": "^5.26.0",
+    "babel-eslint": "^10.1.0",
     "depd": "^1.1.2",
+    "eslint": "^8.16.0",
     "jest": "^28.1.0",
     "rollup": "^2.73.0",
     "ts-node": "^10.7.0",
