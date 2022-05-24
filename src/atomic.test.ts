@@ -1,5 +1,5 @@
-import { Atomic } from './'
-import { timeout } from './'
+import { Atomic } from './atomic'
+import { timeout } from './timeout'
 
 test('Atomic ignore error', async () => {
   const atomic = Atomic()

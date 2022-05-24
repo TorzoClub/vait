@@ -1,4 +1,4 @@
-import { Lock } from './'
+import { Lock } from './lock'
 
 test('lock', async () => {
   const [lock, unlock] = Lock()
