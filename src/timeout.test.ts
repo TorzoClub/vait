@@ -1,4 +1,4 @@
-import { timeout } from './'
+import { timeout } from './timeout'
 
 test('timeout', async () => {
   let value: number | undefined = undefined
