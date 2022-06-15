@@ -1,3 +1,8 @@
+export class ContextError extends Error {
+  constructor(message: string) {
+    super(message)
+  }
+}
 
 export function Context<
   Keys extends string | number | symbol,
@@ -9,25 +14,27 @@ export function Context<
     preset
   )
 
-  function exist<K extends Keys>(key: K) {
+  function has<K extends Keys>(key: K) {
     return (key in pool)
   }
 
-  function get<FK extends Keys>(key: FK): never | Pool[FK] {
-    if (!exist(key)) {
-      throw Error(`cannot find ${key} in Context`)
-    } else {
-      return pool[key]
-    }
-  }
+  return Object.freeze({
+    has,
 
-  function set<FK extends Keys>(key: FK, value: Pool[FK]): void {
-    if (!exist(key)) {
-      throw Error(`cannot find ${key} in Context`)
-    } else {
-      pool[key] = value
-    }
-  }
+    get<FK extends Keys>(key: FK): never | Pool[FK] {
+      if (!has(key)) {
+        throw new ContextError(`'${key}' does not exist in Context`)
+      } else {
+        return pool[key]
+      }
+    },
 
-  return Object.freeze({ exist, get, set })
+    set<FK extends Keys>(key: FK, value: Pool[FK]): void {
+      if (!has(key)) {
+        throw new ContextError(`'${key}' does not exist in Context`)
+      } else {
+        pool[key] = value
+      }
+    }
+  })
 }

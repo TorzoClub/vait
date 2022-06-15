@@ -1,6 +1,6 @@
 import { Context } from './context'
 
-test('Context get', () => {
+test('Context.get', () => {
   const func = () => {}
   const obj = { a: 9 }
   const ctx = Context({
@@ -18,7 +18,7 @@ test('Context get', () => {
   expect(ctx.get('obj')).toBe(obj)
 })
 
-test('Context set', () => {
+test('Context.set', () => {
   const ctx = Context({ val: 0 })
 
   expect(ctx.get('val')).toBe(0)
@@ -27,17 +27,17 @@ test('Context set', () => {
   expect(ctx.get('val')).toBe(999)
 })
 
-test('Context exist', () => {
+test('Context.has', () => {
   const ctx = Context({ val: 0 })
-  expect(ctx.exist('val')).toBe(true)
-  expect(ctx.exist('notfound')).toBe(false)
+  expect(ctx.has('val')).toBe(true)
+  expect(ctx.has('notfound')).toBe(false)
 })
 
-test('Context exist throw', () => {
+test('Context throw', () => {
   const ctx = Context({ val: 0, und: undefined })
 
   expect(() => {
-    const b = ctx.get('notfound')
+    ctx.get('notfound')
   }).toThrow()
 
   expect(() => {
@@ -45,10 +45,10 @@ test('Context exist throw', () => {
   }).toThrow()
 })
 
-test('Context not support Propertype', () => {
+test('Context not support Prototype', () => {
   const ctx = Context(Object.create({ val: 0, und: undefined }))
 
-  expect(ctx.exist('val')).toBe(false)
+  expect(ctx.has('val')).toBe(false)
   expect(() => ctx.get('val')).toThrow()
   expect(() => ctx.set('val', 9)).toThrow()
 })
