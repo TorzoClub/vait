@@ -1,4 +1,4 @@
-import { Context } from './context'
+import { Context, ContextError } from './context'
 
 test('Context.get', () => {
   const func = () => {}
@@ -33,8 +33,16 @@ test('Context.has', () => {
   expect(ctx.has('notfound')).toBe(false)
 })
 
+test('Context not support Prototype', () => {
+  const ctx = Context(Object.create({ val: 0, und: undefined }))
+
+  expect(ctx.has('val')).toBe(false)
+  expect(() => ctx.get('val')).toThrow()
+  expect(() => ctx.set('val', 9)).toThrow()
+})
+
 test('Context throw', () => {
-  const ctx = Context({ val: 0, und: undefined })
+  const ctx = Context({ val: 0 })
 
   expect(() => {
     ctx.get('notfound')
@@ -45,12 +53,13 @@ test('Context throw', () => {
   }).toThrow()
 })
 
-test('Context not support Prototype', () => {
-  const ctx = Context(Object.create({ val: 0, und: undefined }))
-
-  expect(ctx.has('val')).toBe(false)
-  expect(() => ctx.get('val')).toThrow()
-  expect(() => ctx.set('val', 9)).toThrow()
+test('ContextError', () => {
+  const ctx = Context({ val: 0 })
+  try {
+    ctx.get('notfound')
+  } catch (err) {
+    expect(err instanceof ContextError).toBe(true)
+  }
 })
 
 test('Context immutable', () => {
