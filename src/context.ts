@@ -11,7 +11,7 @@ export function Context<
 >(preset: Pool) {
   const pool: Pool = Object.assign(
     Object.create(null),
-    preset
+    preset,
   )
 
   function has<K extends Keys>(key: K) {
@@ -21,7 +21,7 @@ export function Context<
   return Object.freeze({
     has,
 
-    get<FK extends Keys>(key: FK): never | Pool[FK] {
+    get<FK extends Keys>(key: FK): Pool[FK] {
       if (!has(key)) {
         throw new ContextError(`'${key}' does not exist in Context`)
       } else {
@@ -29,12 +29,12 @@ export function Context<
       }
     },
 
-    set<FK extends Keys>(key: FK, value: Pool[FK]): void {
+    set<FK extends Keys>(key: FK, new_value: Pool[FK]): void {
       if (!has(key)) {
         throw new ContextError(`'${key}' does not exist in Context`)
       } else {
-        pool[key] = value
+        pool[key] = new_value
       }
-    }
+    },
   })
 }
