@@ -1,9 +1,9 @@
-import { Context, ContextError } from './context'
+import { CreateContext, ContextError, Context } from './context'
 
 test('Context.get', () => {
   const func = () => {}
   const obj = { a: 9 }
-  const ctx = Context({
+  const ctx = CreateContext({
     val: 0,
     undefined: undefined,
     null: null,
@@ -19,7 +19,7 @@ test('Context.get', () => {
 })
 
 test('Context.set', () => {
-  const ctx = Context({ val: 0 })
+  const ctx = CreateContext({ val: 0 })
 
   expect(ctx.get('val')).toBe(0)
   ctx.set('val', 999)
@@ -28,13 +28,13 @@ test('Context.set', () => {
 })
 
 test('Context.has', () => {
-  const ctx = Context({ val: 0 })
+  const ctx = CreateContext({ val: 0 })
   expect(ctx.has('val')).toBe(true)
   expect(ctx.has('notfound')).toBe(false)
 })
 
 test('Context not support Prototype', () => {
-  const ctx = Context(Object.create({ val: 0, und: undefined }))
+  const ctx = CreateContext(Object.create({ val: 0, und: undefined }))
 
   expect(ctx.has('val')).toBe(false)
   expect(() => ctx.get('val')).toThrow()
@@ -42,7 +42,7 @@ test('Context not support Prototype', () => {
 })
 
 test('Context throw', () => {
-  const ctx = Context({ val: 0 })
+  const ctx = CreateContext({ val: 0 })
 
   expect(() => {
     ctx.get('notfound')
@@ -54,7 +54,7 @@ test('Context throw', () => {
 })
 
 test('ContextError', () => {
-  const ctx = Context({ val: 0 })
+  const ctx = CreateContext({ val: 0 })
   try {
     ctx.get('notfound')
   } catch (err) {
@@ -63,7 +63,7 @@ test('ContextError', () => {
 })
 
 test('Context immutable', () => {
-  const ctx = Context({})
+  const ctx = CreateContext({})
   expect(() => {
     Object.assign(ctx, { get: 9 })
   }).toThrow()
@@ -73,4 +73,27 @@ test('Context immutable', () => {
   expect(() => {
     Object.assign(ctx, { other: 9 })
   }).toThrow()
+})
+
+test('context share', () => {
+  type InitContext = Context<string, { a: number, b: number, c: number }>
+
+  function foo(ctx: InitContext) {
+    ctx.set('a', 2)
+  }
+  function bar(ctx: InitContext) {
+    ctx.set('b', ctx.get('a') * ctx.get('b'))
+  }
+
+  const c = CreateContext<string, { a: number, b: number, c: number }>({
+    a: 0,
+    b: 10,
+    c: 1
+  })
+
+  foo(c)
+  expect(c.get('a')).toBe(2)
+
+  bar(c)
+  expect(c.get('b')).toBe(20)
 })

@@ -4,11 +4,19 @@ export class ContextError extends Error {
   }
 }
 
-export function Context<
+export type Context<
   Keys extends string | number | symbol,
-  Values,
-  Pool extends Readonly<Record<Keys, Values>>
->(preset: Pool) {
+  Pool extends Readonly<Record<Keys, unknown>>
+> = Readonly<{
+  has<K extends Keys>(key: K): boolean
+  get<FK extends Keys>(key: FK): Pool[FK]
+  set<FK extends Keys>(key: FK, new_value: Pool[FK]): void
+}>
+
+export function CreateContext<
+  Keys extends string | number | symbol,
+  Pool extends Readonly<Record<Keys, unknown>>
+>(preset: Pool): Context<Keys, Pool> {
   const pool: Pool = Object.assign(
     Object.create(null),
     preset,
