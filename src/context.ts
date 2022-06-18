@@ -1,8 +1,4 @@
-export class ContextError extends Error {
-  constructor(message: string) {
-    super(message)
-  }
-}
+export class ContextError extends Error { }
 
 export type Context<
   Keys extends string | number | symbol,
