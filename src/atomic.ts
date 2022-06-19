@@ -19,7 +19,7 @@ export function Atomic() {
     } else {
       const new_processing = task()
       setProcessing(new_processing)
-      
+
       try {
         await new_processing
       } finally {
