@@ -1,4 +1,4 @@
-export { createMemo } from './create-memo'
+export { Wrap, Memo } from './memo'
 export { Atomic } from './atomic'
 export { Lock } from './lock'
 export { timeout } from './timeout'

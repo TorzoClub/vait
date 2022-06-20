@@ -1,8 +1,8 @@
-import { createMemo } from './create-memo'
+import { Memo } from './memo'
 import { nextTick } from './next-tick'
 
 export function Atomic() {
-  const [ getProcessing, setProcessing ] = createMemo<Promise<unknown> | null>(null)
+  const [ getProcessing, setProcessing ] = Memo<Promise<unknown> | null>(null)
 
   return async function atomic<T>(
     task: () => Promise<T>,
