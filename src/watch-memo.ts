@@ -29,8 +29,9 @@ export const WatchMemo = <D>(init_data: D): WatchMemo<D> => {
         setChangeState(false)
         set(new_data)
         changed_signal.trigger(new_data)
+        setChangeState(true)
       } else {
-        throw new WatchMemoError('cannot set memo in watcher')
+        throw new WatchMemoError('cannot change memo in watcher')
       }
     },
     function SetWatcher(cb) {
