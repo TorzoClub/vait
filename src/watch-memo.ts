@@ -9,11 +9,11 @@ export interface RemoveMemoWatcher {
   (): void
 }
 
-export interface MemoWatcher<D> {
+export interface SetMemoWatcher<D> {
   (cb: MemoWatcherCallback<D>): RemoveMemoWatcher
 }
 
-export type WatchMemo<D> = Readonly<[...Memo<D>, MemoWatcher<D>]>
+export type WatchMemo<D> = Readonly<[...Memo<D>, SetMemoWatcher<D>]>
 
 export class WatchMemoError extends Error {}
 
