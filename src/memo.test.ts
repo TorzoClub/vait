@@ -1,4 +1,4 @@
-import { Memo } from './memo'
+import { Memo, Wrap } from './memo'
 
 test('CreateMemo', async () => {
   const [getVal, setVal] = Memo(114514)
@@ -9,4 +9,9 @@ test('CreateMemo', async () => {
   expect(return_val).toBe(undefined)
 
   expect(getVal()).toBe(9999)
+})
+
+test('Wrap', () => {
+  const valueWrapper = Wrap('wrap')
+  expect(valueWrapper()).toBe('wrap')
 })

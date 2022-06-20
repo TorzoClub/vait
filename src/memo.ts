@@ -6,3 +6,5 @@ export const Memo = <D>(data: D) => [
   () => data,
   (new_data: D) => { data = new_data }
 ] as const
+
+export const Wrap = <D>(data: D) => () => data
