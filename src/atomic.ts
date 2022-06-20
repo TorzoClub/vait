@@ -1,4 +1,4 @@
-import { CreateMemo } from './create-memo'
+import { CreateMemo } from './memo'
 import { nextTick } from './next-tick'
 
 export function Atomic() {
