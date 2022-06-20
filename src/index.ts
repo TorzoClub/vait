@@ -1,4 +1,5 @@
-export { Wrap, Memo } from './memo'
+export { MemoGetter, MemoSetter, Memo, Wrap } from './memo'
+export { WatchMemo, WatchMemoError } from './watch-memo'
 export { Signal } from './signal'
 export { Atomic } from './atomic'
 export { Lock } from './lock'
