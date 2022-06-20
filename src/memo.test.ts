@@ -11,7 +11,6 @@ test('Memo', async () => {
   expect(getVal()).toBe(9999)
 })
 
-
 test('share Memo', () => {
   function outerFn([getVal, setVal]: Memo<number>) {
     expect(getVal()).toBe(9)
