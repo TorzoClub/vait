@@ -1,4 +1,5 @@
 export { Wrap, Memo } from './memo'
+export { Signal } from './signal'
 export { Atomic } from './atomic'
 export { Lock } from './lock'
 export { timeout } from './timeout'
