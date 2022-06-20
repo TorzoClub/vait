@@ -1,7 +1,7 @@
-import { createMemo } from './create-memo'
+import { CreateMemo } from './create-memo'
 
-test('createMemo', async () => {
-  const [getVal, setVal] = createMemo(114514)
+test('CreateMemo', async () => {
+  const [getVal, setVal] = CreateMemo(114514)
 
   expect(getVal()).toBe(114514)
 
