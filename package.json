@@ -1,11 +1,12 @@
 {
   "name": "vait",
-  "version": "2.5.0",
+  "version": "2.5.2",
   "main": "./dist/vait.common.js",
   "module": "./dist/vait.esm.js",
   "typings": "./types/index.d.ts",
   "scripts": {
     "test": "jest",
+    "test-watch": "jest --watchAll",
     "build:type": "rm -rf types/* && tsc -p ./tsconfig.type.json",
     "build:rollup": "rollup -c rollup.config.js",
     "build": "yarn build:type && yarn build:rollup",

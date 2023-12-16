@@ -46,5 +46,8 @@ test('WatchMemo cannot set memo in watcher', () => {
 
   expect(get()).toBe(9)
 
+  set(111)
+  expect(get()).toBe(111)
+
   global.console = beforeConsole
 })
