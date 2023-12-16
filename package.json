@@ -5,7 +5,7 @@
   "module": "./dist/vait.esm.js",
   "typings": "./types/index.d.ts",
   "scripts": {
-    "watch": "jest",
+    "test": "jest",
     "test-watch": "jest --watchAll",
     "build:type": "rm -rf types/* && tsc -p ./tsconfig.type.json",
     "build:rollup": "rollup -c rollup.config.js",
