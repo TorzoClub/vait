@@ -21,7 +21,6 @@
   "repository": "git@github.com:TorzoClub/vait.git",
   "author": "vec <vec@torzo.club>",
   "license": "MIT",
-  "private": false,
   "devDependencies": {
     "@babel/parser": "^7.17.12",
     "@babel/preset-env": "^7.17.12",
