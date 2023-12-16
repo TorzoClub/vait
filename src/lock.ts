@@ -1,19 +1,13 @@
-type Unlock<T> = 
-(() => void) | ((v?: T) => void)
+type Unlock<T> = (v: T) => void
 
+export function Lock(): readonly [Promise<void>, Unlock<void>]
+export function Lock<T>(): readonly [Promise<T>, Unlock<T>]
 export function Lock<T>() {
-  let outterResolve: (value?: T) => void
-  const lock = new Promise<T | void>((resolve) => {
-    outterResolve = resolve
-  })
-
-  const unlock: Unlock<T> = (v) => {
-    if (v === undefined) {
-      outterResolve()
-    } else {
-      outterResolve(v)
-    }
-  }
-  
-  return [lock, unlock] as const
+  let resolve: Unlock<T>
+  return [
+    new Promise<T>(
+      inner_resolve => resolve = inner_resolve
+    ),
+    (v: T) => resolve(v)
+  ] as const
 }
