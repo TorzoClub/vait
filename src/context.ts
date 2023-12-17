@@ -1,4 +1,4 @@
-export class ContextError extends Error { }
+export class VaitContextError extends Error { }
 
 export type Context<
   Keys extends string | number | symbol,
@@ -27,7 +27,7 @@ export function CreateContext<
 
     get<FK extends Keys>(key: FK): Pool[FK] {
       if (!has(key)) {
-        throw new ContextError(`'${key}' does not exist in Context`)
+        throw new VaitContextError(`'${String(key)}' does not exist in Context`)
       } else {
         return pool[key]
       }
@@ -35,7 +35,7 @@ export function CreateContext<
 
     set<FK extends Keys>(key: FK, new_value: Pool[FK]): void {
       if (!has(key)) {
-        throw new ContextError(`'${key}' does not exist in Context`)
+        throw new VaitContextError(`'${String(key)}' does not exist in Context`)
       } else {
         pool[key] = new_value
       }

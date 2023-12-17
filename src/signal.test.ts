@@ -70,7 +70,7 @@ test('Signal trigger ignore error', () => {
   global.console = beforeConsole
 })
 
-test('Signal unReceive()', () => {
+test('Signal cancelReceive()', () => {
   const sig = Signal<void>()
 
   let __val__ = 0
@@ -78,13 +78,13 @@ test('Signal unReceive()', () => {
     __val__ = 999
   }
   sig.receive(handler)
-  sig.unReceive(handler)
+  sig.cancelReceive(handler)
   sig.trigger()
 
   expect(__val__).toBe(0)
 })
 
-test('Signal unReceive() other func', () => {
+test('Signal cancelReceive() other func', () => {
   const sig = Signal<void>()
 
   let __val__ = 0
@@ -93,10 +93,10 @@ test('Signal unReceive() other func', () => {
   }
 
   sig.receive(handler)
-  sig.unReceive(handler)
+  sig.cancelReceive(handler)
 
   const otherFn = () => {}
-  sig.unReceive(otherFn)
+  sig.cancelReceive(otherFn)
 
   sig.trigger()
 
@@ -104,7 +104,7 @@ test('Signal unReceive() other func', () => {
 })
 
 
-test('Signal unReceive() queue', () => {
+test('Signal cancelReceive() queue', () => {
   const sig = Signal<void>()
 
   let __val__ = 0
@@ -119,7 +119,7 @@ test('Signal unReceive() queue', () => {
     __val__ = 3
   })
 
-  sig.unReceive(handler)
+  sig.cancelReceive(handler)
   sig.trigger()
 
   expect(__val__).toBe(3)

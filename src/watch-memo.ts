@@ -38,7 +38,7 @@ export const WatchMemo = <D>(init_data: D): WatchMemo<D> => {
       changed_signal.receive(cb)
       return (
         function RemoveWatcher() {
-          changed_signal.unReceive(cb)
+          changed_signal.cancelReceive(cb)
         }
       )
     }
