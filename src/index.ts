@@ -1,7 +1,7 @@
 export { MemoGetter, MemoSetter, Memo, Wrap } from './memo'
 export { WatchMemo, WatchMemoError } from './watch-memo'
 export { Signal } from './signal'
-export { Atomic } from './atomic'
+export { Serial } from './serial'
 export { Lock } from './lock'
 export { timeout } from './timeout'
 export { nextTick } from './next-tick'

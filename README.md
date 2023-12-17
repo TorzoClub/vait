@@ -22,23 +22,23 @@ timeout(1000).then(() => {
 ```
 
 ```javascript
-import { Atomic, timeout } from 'vait'
+import { Serial, timeout } from 'vait'
 
-const atomic = Atomic()
+const serial = Serial()
 
 function randomNumber(range) {
   Math.floor(Math.random() * range);
 }
 
-atomic(async () => {
+serial(async () => {
   await timeout(randomNumber(100))
   console.log('step one')
 })
-atomic(async () => {
+serial(async () => {
   await timeout(randomNumber(100))
   console.log('step two')
 })
-atomic(async () => {
+serial(async () => {
   await timeout(randomNumber(100))
   console.log('step three')
 })

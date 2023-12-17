@@ -1,20 +1,20 @@
 import { Memo } from './memo'
 import { nextTick } from './next-tick'
 
-export function Atomic() {
+export function Serial() {
   const [ getProcessing, setProcessing ] = Memo<Promise<unknown> | null>(null)
 
-  return async function atomic<T>(
+  return async function serial<T>(
     task: () => Promise<T>,
   ): Promise<T> {
     const processing = getProcessing()
     if (processing !== null) {
       try {
         await processing
-        return atomic(task)
+        return serial(task)
       } catch {
         await nextTick()
-        return atomic(task)
+        return serial(task)
       }
     } else {
       const new_processing = task()

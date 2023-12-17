@@ -1,8 +1,8 @@
-import { Atomic } from './atomic'
+import { Serial } from './serial'
 import { timeout } from './timeout'
 
-test('Atomic ignore error', async () => {
-  const atomic = Atomic()
+test('Serial ignore error', async () => {
+  const serial = Serial()
 
   const history: number[] = []
   const waiting: Promise<unknown>[] = []
@@ -16,22 +16,22 @@ test('Atomic ignore error', async () => {
   await expect(failure).rejects.toThrow()
 
   waiting.push(
-    atomic(() => failure).catch(() => {})
+    serial(() => failure).catch(() => {})
   )
 
   waiting.push(
-    atomic(async () => {
+    serial(async () => {
       history.push(2)
     })
   )
-  
+
   await Promise.all(waiting)
-  
+
   expect(history).toEqual([2])
 })
 
-test('Atomic error catch execute sequence', async () => {
-  const atomic = Atomic()
+test('Serial error catch execute sequence', async () => {
+  const serial = Serial()
 
   const history: number[] = []
   const waiting: Promise<unknown>[] = []
@@ -45,36 +45,36 @@ test('Atomic error catch execute sequence', async () => {
   await expect(failure).rejects.toThrow()
 
   waiting.push(
-    atomic(() => failure).catch(() => {
+    serial(() => failure).catch(() => {
       history.push(1)
     })
   )
 
   waiting.push(
-    atomic(async () => {
+    serial(async () => {
       history.push(2)
     })
   )
 
   waiting.push(
-    atomic(async () => {
+    serial(async () => {
       history.push(3)
     })
   )
-  
+
   await Promise.all(waiting)
-  
+
   expect(history).toEqual([1, 2, 3])
 })
 
-test('Atomic sync', async () => {
-  const atomic = Atomic()
+test('Serial sync', async () => {
+  const serial = Serial()
 
   const count = 1000
   const waitting: Promise<number>[] = []
   for (let c = 0; c < count; ++c) {
     waitting.push(
-      atomic(async () => c)
+      serial(async () => c)
     )
   }
 
@@ -84,54 +84,54 @@ test('Atomic sync', async () => {
   }
 })
 
-test('Atomic return value', async () => {
-  const atomic = Atomic()
+test('Serial return value', async () => {
+  const serial = Serial()
 
   expect(233).toBe(
-    await atomic(async () => 233)
+    await serial(async () => 233)
   )
 
   expect('233').toBe(
-    await atomic(async () => '233')
+    await serial(async () => '233')
   )
 })
 
-test('Atomic timeout', async () => {
+test('Serial timeout', async () => {
   const history: number[] = []
   const waiting: Promise<unknown>[] = []
 
-  const atomic = Atomic()
+  const serial = Serial()
   waiting.push(
-    atomic(async () => {
+    serial(async () => {
       await timeout(1000)
       history.push(1)
     })
   )
   waiting.push(
-    atomic(async () => {
+    serial(async () => {
       await timeout(2000)
       history.push(2)
     })
   )
   waiting.push(
-    atomic(async () => {
+    serial(async () => {
       await timeout(10)
       history.push(3)
     })
   )
   waiting.push(
-    atomic(async () => {
+    serial(async () => {
       history.push(4)
     })
   )
   waiting.push(
-    atomic(async () => {
+    serial(async () => {
       await timeout(100)
       history.push(5)
     })
   )
-  
+
   await Promise.all(waiting)
-  
+
   expect(history).toEqual([1, 2, 3, 4, 5])
 })
