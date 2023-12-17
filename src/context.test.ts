@@ -1,4 +1,4 @@
-import { CreateContext, ContextError, Context } from './context'
+import { CreateContext, VaitContextError, Context } from './context'
 
 test('Context.get', () => {
   const func = () => {}
@@ -16,6 +16,7 @@ test('Context.get', () => {
   expect(ctx.get('null')).toBe(null)
   expect(ctx.get('func')).toBe(func)
   expect(ctx.get('obj')).toBe(obj)
+  expect(ctx.get('obj')?.a).toBe(9)
 })
 
 test('Context.set', () => {
@@ -53,12 +54,12 @@ test('Context throw', () => {
   }).toThrow()
 })
 
-test('ContextError', () => {
+test('VaitContextError', () => {
   const ctx = CreateContext({ val: 0 })
   try {
     ctx.get('notfound')
   } catch (err) {
-    expect(err instanceof ContextError).toBe(true)
+    expect(err instanceof VaitContextError).toBe(true)
   }
 })
 
