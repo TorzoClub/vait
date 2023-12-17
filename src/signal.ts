@@ -1,50 +1,41 @@
 import { Memo } from './memo'
 
-type QueueFn<P> = (payload: P) => void
-type Queue<P> = Array< QueueFn<P> >
+type Handler<P> = (payload: P) => void
+type Handlers<P> = Array< Handler<P> >
 
-function fetchQueue<P>(queue: Queue<P>, arg: P): void {
-  if (queue.length !== 0) {
-    const [fn, ...remaing_queue] = queue
+function executeHandlers<P>(handlers: Handlers<P>, payload: P): void {
+  if (handlers.length !== 0) {
+    const [fn, ...remaing] = handlers
     try {
-      fn(arg)
+      fn(payload)
     } catch (err) {
       console.warn('Signal Warning:', err)
     } finally {
-      fetchQueue(remaing_queue, arg)
+      executeHandlers(remaing, payload)
     }
   }
 }
 
-export interface Signal<A> {
+export interface Signal<P> {
   isEmpty(): boolean
-  trigger(payload: A): void
-  receive(fn: QueueFn<A>): void
-  unReceive(fn: QueueFn<A>): void
+  trigger(payload: P): void
+  receive(fn: Handler<P>): void
+  unReceive(fn: Handler<P>): void
 }
+export function Signal(): Signal<void>
+export function Signal<P>(): Signal<P>
+export function Signal<P>(): Signal<P> {
+  const [getHandlers, setHandlers] = Memo<Handlers<P>>([])
 
-export function Signal<A>(): Signal<A> {
-  const [getQueue, setQueue] = Memo<Queue<A>>([])
-
-  return Object.freeze({
-    isEmpty() {
-      return !getQueue().length
-    },
-
-    trigger(payload) {
-      fetchQueue(getQueue(), payload)
-    },
-
-    receive(fn) {
-      setQueue([...getQueue(), fn])
-    },
-
-    unReceive(removeFn) {
-      setQueue(
-        getQueue().filter((fn) => {
-          return fn !== removeFn
-        })
+  return {
+    isEmpty: () => !getHandlers().length,
+    trigger: payload => executeHandlers(getHandlers(), payload),
+    receive: fn => setHandlers([...getHandlers(), fn]),
+    unReceive: removeFn =>
+      setHandlers(
+        getHandlers().filter(
+          fn => fn !== removeFn
+        )
       )
-    },
-  })
+  } as const
 }
