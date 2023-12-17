@@ -20,7 +20,7 @@ export interface Signal<P> {
   isEmpty(): boolean
   trigger(payload: P): void
   receive(fn: Handler<P>): void
-  unReceive(fn: Handler<P>): void
+  cancelReceive(fn: Handler<P>): void
 }
 export function Signal(): Signal<void>
 export function Signal<P>(): Signal<P>
@@ -31,7 +31,7 @@ export function Signal<P>(): Signal<P> {
     isEmpty: () => !getHandlers().length,
     trigger: payload => executeHandlers(getHandlers(), payload),
     receive: fn => setHandlers([...getHandlers(), fn]),
-    unReceive: removeFn =>
+    cancelReceive: removeFn =>
       setHandlers(
         getHandlers().filter(
           fn => fn !== removeFn
