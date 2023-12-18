@@ -1,4 +1,4 @@
-import { Memo, Wrap } from './memo'
+import { Memo } from './memo'
 
 test('Memo', async () => {
   const [getVal, setVal] = Memo(114514)
@@ -21,9 +21,4 @@ test('share Memo', () => {
 
   const m = Memo(9)
   outerFn(m)
-})
-
-test('Wrap', () => {
-  const valueWrapper = Wrap('value')
-  expect(valueWrapper()).toBe('value')
 })

@@ -1,10 +1,10 @@
 import { Memo } from './memo'
 import { nextTick } from './next-tick'
 
-export function Serial() {
+export function Serial<T>() {
   const [ getProcessing, setProcessing ] = Memo<Promise<unknown> | null>(null)
 
-  return async function serial<T>(
+  return async function serial(
     task: () => Promise<T>,
   ): Promise<T> {
     const processing = getProcessing()

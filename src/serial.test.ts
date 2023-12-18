@@ -71,7 +71,7 @@ test('Serial sync', async () => {
   const serial = Serial()
 
   const count = 1000
-  const waitting: Promise<number>[] = []
+  const waitting: Promise<unknown>[] = []
   for (let c = 0; c < count; ++c) {
     waitting.push(
       serial(async () => c)
