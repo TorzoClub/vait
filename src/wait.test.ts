@@ -62,3 +62,9 @@ test('Wait call go repeatedly', async () => {
   go(4)
   expect(await wait).toBe(1)
 })
+
+test('Wait error handling', async () => {
+  const [ waiting, ok, failure ] = Wait()
+  failure(new Error('aaaa'))
+  expect( waiting ).rejects.toThrow('aaaa')
+})

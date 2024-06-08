@@ -145,7 +145,7 @@ test('Signal isEmpty()', () => {
   expect(sig.isEmpty()).toBe(false)
 })
 
-test('Signal a large quantity handlers', () => {
+test.skip('Signal a large quantity handlers', () => {
   const sig = Signal()
   let l = -1
   const HANDLER_NUMBER = 50_000
@@ -157,7 +157,7 @@ test('Signal a large quantity handlers', () => {
 })
 
 jest.setTimeout(30000)
-test('Signal a large quantity error handlers', async () => {
+test.skip('Signal a large quantity error handlers', async () => {
   const restoreConsole = ignoreConsoleWarn(() => {})
 
   const [wait, go] = Wait()

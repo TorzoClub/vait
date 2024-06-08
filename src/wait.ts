@@ -1,13 +1,11 @@
-type Go<T> = (v: T) => void
+import { OutterPromise } from './outter-promise'
 
-export function Wait(): readonly [Promise<void>, Go<void>]
-export function Wait<T>(): readonly [Promise<T>, Go<T>]
+type Go<T> = (v: T) => void
+type Cancel = (reason?: any) => void
+
+export function Wait(): readonly [Promise<void>, Go<void>, Cancel]
+export function Wait<T>(): readonly [Promise<T>, Go<T>, Cancel]
 export function Wait<T>() {
-  let resolve: Go<T>
-  return [
-    new Promise<T>(
-      inner_resolve => resolve = inner_resolve
-    ),
-    (v: T) => resolve(v)
-  ] as const
+  const [ done, failure, waiting ] = OutterPromise<T>()
+  return [ waiting, done, failure ] as const
 }

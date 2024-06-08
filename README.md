@@ -22,23 +22,23 @@ timeout(1000).then(() => {
 ```
 
 ```javascript
-import { Serial, timeout } from 'vait'
+import { Sequence, timeout } from 'vait'
 
-const serial = Serial()
+const sq = Sequence()
 
 function randomNumber(range) {
   Math.floor(Math.random() * range);
 }
 
-serial(async () => {
+sq(async () => {
   await timeout(randomNumber(100))
   console.log('step one')
 })
-serial(async () => {
+sq(async () => {
   await timeout(randomNumber(100))
   console.log('step two')
 })
-serial(async () => {
+sq(async () => {
   await timeout(randomNumber(100))
   console.log('step three')
 })
@@ -68,10 +68,10 @@ go() // 因为是调用了 Promise resolve，所以前面 console.log(str) 只�
 // 一个"卡"住运行时的用法
 import { Wait } from 'vait'
 
-const [wait, go] = Wait()
+const [waiting, go] = Wait()
 
 ;(async () => {
-  const value = await wait
+  const value = await waiting
   console.log('value accepted:', value)
 })()
 

@@ -1,12 +1,12 @@
 {
   "name": "vait",
-  "version": "2.6.0",
+  "version": "3.0.0",
   "main": "./dist/vait.common.js",
   "module": "./dist/vait.esm.js",
   "typings": "./types/index.d.ts",
   "scripts": {
     "test": "jest",
-    "test-watch": "jest --watchAll",
+    "test-watch": "jest ./queue.test.ts ./sequence.test.ts --watchAll",
     "build:type": "rm -rf types/* && tsc -p ./tsconfig.type.json",
     "build:rollup": "rollup -c rollup.config.js",
     "build": "yarn build:type && yarn build:rollup",
@@ -37,6 +37,6 @@
     "rollup": "^2.73.0",
     "ts-node": "^10.7.0",
     "tslib": "^2.4.0",
-    "typescript": "^4.6.4"
+    "typescript": "^5.4.5"
   }
 }

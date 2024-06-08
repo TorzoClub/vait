@@ -89,9 +89,14 @@ test('Serial error catch execute sequence', async () => {
     })
   )
 
-  await Promise.all(waiting)
+  waiting.push(
+    sq(async () => {
+      history.push(4)
+    })
+  )
 
-  expect(history).toEqual([1, 2, 3])
+  await Promise.all(waiting)
+  expect(history).toEqual([2, 1, 3, 4])
 })
 
 test('Serial sync', async () => {

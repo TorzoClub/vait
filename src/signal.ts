@@ -45,7 +45,7 @@ export function Signal<P>(): Signal<P>
 export function Signal<P>(): Signal<P> {
   const [getHandlers, setHandlers] = Memo<Handlers<P>>([])
   return {
-    isEmpty: () => !getHandlers().length,
+    isEmpty: () => (getHandlers().length === 0),
     trigger: payload => executeHandlers(getHandlers(), payload),
     receive: fn => setHandlers([...getHandlers(), fn]),
     cancelReceive: removeFn =>
