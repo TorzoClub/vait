@@ -1,4 +1,4 @@
-import { WatchMemo } from "./watch-memo"
+import { WatchMemo } from './watch-memo'
 
 test('WatchMemo', () => {
   const [ get, set, watch ] = WatchMemo(0)

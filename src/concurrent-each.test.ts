@@ -1,6 +1,6 @@
 import assert from 'assert'
-import { concurrentEach } from "./concurrent-each"
-import { timeout } from "./timeout"
+import { concurrentEach } from './concurrent-each'
+import { timeout } from './timeout'
 
 test('concurrentEach(empty list)', async () => {
   let val = 0

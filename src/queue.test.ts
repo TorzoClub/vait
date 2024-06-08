@@ -1,6 +1,6 @@
 import assert from 'assert'
-import { Queue } from "./queue"
-import { timeout } from "./timeout"
+import { Queue } from './queue'
+import { timeout } from './timeout'
 import { Wait } from './wait'
 
 test('Queue 不会立即执行', async () => {

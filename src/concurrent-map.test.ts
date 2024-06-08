@@ -2,7 +2,7 @@
 // const assert = require('power-assert')
 
 import { concurrentMap } from './concurrent-map'
-import { timeout } from "./timeout"
+import { timeout } from './timeout'
 
 test('concurrentMap', async () => {
   const data = 'abcdefghi'.split('')
