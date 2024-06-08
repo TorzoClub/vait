@@ -1,5 +1,32 @@
 import { Serial } from './serial'
 import { timeout } from './timeout'
+import { Wait } from './wait'
+
+test('Serial', async () => {
+  const serial = Serial()
+
+  const list: number[] = []
+
+  for (let i = 0; i < 50; ++i) {
+    ((i: number) => {
+      serial(async () => {
+        await timeout(Math.floor(Math.random()*60))
+        list.push(i)
+      })
+    })(i)
+  }
+
+  await serial(async () => {
+    list.push(999888222)
+  })
+
+  expect(list.includes(999888222)).toBe(true)
+  expect(list.indexOf(999888222)).toBe(50)
+
+  for (let i = 0; i < (list.length - 1); ++i) {
+    expect(list[i]).toBe(i)
+  }
+})
 
 test('Serial ignore error', async () => {
   const serial = Serial()
