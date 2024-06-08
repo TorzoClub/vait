@@ -252,3 +252,50 @@ test('Queue concurrent', async () => {
   await waiting
   expect( total ).toBe( 10 )
 })
+
+test('Queue concurrent(2)', async () => {
+  const MAX_CONCURRENT = 3
+  const q = Queue(MAX_CONCURRENT)
+  let [ waiting, done ] = Wait()
+
+  let c = 0
+  for (let i = 0; i < 10; ++i) {
+    q.task(async () => {
+      c += 1
+      await waiting
+    })
+  }
+
+  await timeout(200)
+  expect(c).toBe( MAX_CONCURRENT )
+
+  {
+    const [ new_waiting, newDone ] = Wait()
+    const oldDone = done
+    waiting = new_waiting
+    done = newDone
+    oldDone()
+    await timeout(200)
+    expect(c).toBe( MAX_CONCURRENT * 2 )
+  }
+
+  {
+    const [ new_waiting, newDone ] = Wait()
+    const oldDone = done
+    waiting = new_waiting
+    done = newDone
+    oldDone()
+    await timeout(200)
+    expect(c).toBe( MAX_CONCURRENT * 3 )
+  }
+
+  {
+    const [ new_waiting, newDone ] = Wait()
+    const oldDone = done
+    waiting = new_waiting
+    done = newDone
+    oldDone()
+    await timeout(200)
+    expect(c).toBe( 10 )
+  }
+})

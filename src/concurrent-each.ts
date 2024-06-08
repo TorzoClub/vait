@@ -2,10 +2,10 @@ import { Wait } from './wait'
 
 const NONE_ERROR = Symbol('NONE_ERROR')
 
-export async function concurrentEach<T, NT>(
+export async function concurrentEach<T>(
   __CONCURRENT_LIMIT: number,
   list: T[],
-  asyncFn: (item: T, idx: number, total: T[]) => Promise<NT>,
+  asyncFn: (item: T, idx: number, total: T[]) => Promise<void>,
 ): Promise<void> {
   if (__CONCURRENT_LIMIT < 1) {
     throw new RangeError('concurrent_limit should >= 1')

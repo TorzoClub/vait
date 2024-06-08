@@ -72,21 +72,21 @@ export function Queue<P>(init_max_concurrent = 1) {
         })
       }
     }
+  }
 
-    async function processing() {
-      signals['WILL_PROCESSING'].trigger()
+  async function processing() {
+    signals['WILL_PROCESSING'].trigger()
 
-      const [current_task, ...remain_tasks] = getTasks()
-      setTasks(remain_tasks)
+    const [current_task, ...remain_tasks] = getTasks()
+    setTasks(remain_tasks)
 
-      signals['PROCESSING'].trigger(current_task)
+    signals['PROCESSING'].trigger(current_task)
 
-      await current_task.func()
+    await current_task.func()
 
-      if (remain_tasks.length === 0) {
-        setStatus('pause')
-        signals['ALL_DONE'].trigger()
-      }
+    if (remain_tasks.length === 0) {
+      setStatus('pause')
+      signals['ALL_DONE'].trigger()
     }
   }
 
