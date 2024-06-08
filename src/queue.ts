@@ -33,13 +33,16 @@ type Queue<P> = Readonly<{
   getTasks: MemoGetter<QueueTask<P>[]>
   setTasks: MemoSetter<QueueTask<P>[]>
   signals: QueueSignals<P>
+  setMaxConcurrent: MemoSetter<number>
 }>
 
-export function Queue(): Queue<void>
-export function Queue<P>(): Queue<P>
-export function Queue<P>() {
+export function Queue(init_max_concurrent?: number): Queue<void>
+export function Queue<P>(init_max_concurrent?: number): Queue<P>
+export function Queue<P>(init_max_concurrent = 1) {
   const [getTasks, setTasks] = Memo<QueueTask<P>[]>([])
   const [getStatus, setStatus] = Memo<QueueStatus>('pause')
+  const [getMaxConcurrent, setMaxConcurrent] = Memo<number>(init_max_concurrent)
+
   const signals = {
     PROCESSING: Signal<QueueTask<P>>(),
     WILL_PROCESSING: Signal(),
@@ -49,28 +52,41 @@ export function Queue<P>() {
   async function run() {
     if (getStatus() === 'running') {
       return
-    } else {
-      setStatus('running')
+    }
+    setStatus('running')
 
-      await nextTick()
+    await nextTick()
 
+    let current_concurrent = 0
+    callConcurrent()
+    async function callConcurrent() {
+      while (
+        (getStatus() === 'running') &&
+        (current_concurrent < getMaxConcurrent()) &&
+        (getTasks().length > 0)
+      ) {
+        current_concurrent += 1
+        processing().then(() => {
+          current_concurrent -= 1
+          callConcurrent()
+        })
+      }
+    }
+
+    async function processing() {
       signals['WILL_PROCESSING'].trigger()
 
-      while (getTasks().length > 0) {
-        const [current_task, ...remain_tasks] = getTasks()
-        setTasks(remain_tasks)
+      const [current_task, ...remain_tasks] = getTasks()
+      setTasks(remain_tasks)
 
-        signals['PROCESSING'].trigger(current_task)
+      signals['PROCESSING'].trigger(current_task)
 
-        await current_task.func()
+      await current_task.func()
 
-        if (remain_tasks.length > 0) {
-          signals['WILL_PROCESSING'].trigger()
-        }
+      if (remain_tasks.length === 0) {
+        setStatus('pause')
+        signals['ALL_DONE'].trigger()
       }
-
-      setStatus('pause')
-      signals['ALL_DONE'].trigger()
     }
   }
 
@@ -100,5 +116,6 @@ export function Queue<P>() {
     getTasks,
     setTasks,
     signals,
+    setMaxConcurrent,
   } as const
 }

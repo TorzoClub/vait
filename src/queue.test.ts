@@ -66,7 +66,7 @@ test('Queue 错误处理', async () => {
   }
 })
 
-test('Queue 错误处理不会停止队列', async () => {
+test('Queue 任务出错时也不会停止队列', async () => {
   const q = Queue()
 
   let val = 0
@@ -177,8 +177,9 @@ test('Queue PROCESSING signal', async () => {
 
 test('Queue WILL_PROCESSING signal', async () => {
   const q = Queue<number>()
-
+  let revoke_count = 0
   q.signals.WILL_PROCESSING.receive(() => {
+    revoke_count += 1
     q.setTasks(
       q.getTasks().filter(t => {
         return t.payload % 2 === 0
@@ -203,4 +204,51 @@ test('Queue WILL_PROCESSING signal', async () => {
   for (const num of list) {
     assert(num % 2 === 0)
   }
+
+  expect( revoke_count ).toBe( list.length )
+})
+
+test('Queue keep sequence', async () => {
+  const q = Queue()
+  const list: string[] = []
+  const input = 'abcdefghijklmn'.split('')
+  for (let i = 0; i < input.length; ++i) {
+    q.task(async () => {
+      const w1 = Math.floor(Math.random() * 30)
+      const w2 = Math.floor(Math.random() * 30)
+
+      await timeout(w1)
+      list.push( input.slice(0, i + 1).join('') )
+      await timeout(w2)
+    })
+  }
+
+  const [waiting, done] = Wait()
+  q.signals.ALL_DONE.receive(done)
+  await waiting
+
+  for (let i = 0; i < input.length; ++i) {
+    expect( list[i] ).toBe( input.slice(0, i + 1).join('') )
+  }
+})
+
+test('Queue concurrent', async () => {
+  const MAX_CONCURRENT = 3
+  const q = Queue(MAX_CONCURRENT)
+  let c = 0
+  let total = 0
+  for (let i = 0; i < 10; ++i) {
+    q.task(async () => {
+      c += 1
+      await timeout(100)
+      total += 1
+    })
+  }
+  await timeout(10)
+  expect( c ).toBe( MAX_CONCURRENT )
+
+  const [waiting, done] = Wait()
+  q.signals.ALL_DONE.receive(done)
+  await waiting
+  expect( total ).toBe( 10 )
 })

@@ -117,6 +117,7 @@ test('Serial sync', async () => {
 })
 
 test('Serial return value', async () => {
+  jest.setTimeout(1000)
   const sq = Sequence()
 
   expect(233).toBe(

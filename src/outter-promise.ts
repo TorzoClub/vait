@@ -1,5 +1,5 @@
 type Resolve<T> = (value: T | PromiseLike<T>) => void
-type Reject = (reason?: any) => void
+type Reject = (reason?: unknown) => void
 
 export function OutterPromise<T>() {
   let resolve: undefined | Resolve<T>
