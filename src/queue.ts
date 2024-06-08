@@ -1,4 +1,4 @@
-import { Memo, MemoGetter, MemoSetter } from './memo'
+import { Memo, MemoGetter, MemoSetter, MemoWithValidating } from './memo'
 import { nextTick } from './next-tick'
 import { OutterPromise } from './outter-promise'
 import { Signal } from './signal'
@@ -36,12 +36,23 @@ type Queue<P> = Readonly<{
   setMaxConcurrent: MemoSetter<number>
 }>
 
+function validateMaxConcurrent(v: number) {
+  if (!Number.isInteger(v)) {
+    return 'Max Concurrent should be Integer'
+  } else if (v < 1) {
+    return 'Max Concurrent should >= 1'
+  }
+}
+
 export function Queue(init_max_concurrent?: number): Queue<void>
 export function Queue<P>(init_max_concurrent?: number): Queue<P>
 export function Queue<P>(init_max_concurrent = 1) {
   const [getTasks, setTasks] = Memo<QueueTask<P>[]>([])
   const [getStatus, setStatus] = Memo<QueueStatus>('pause')
-  const [getMaxConcurrent, setMaxConcurrent] = Memo<number>(init_max_concurrent)
+  const [getMaxConcurrent, setMaxConcurrent] = MemoWithValidating<number>(
+    init_max_concurrent,
+    validateMaxConcurrent,
+  )
 
   const signals = {
     PROCESSING: Signal<QueueTask<P>>(),

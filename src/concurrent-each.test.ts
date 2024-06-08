@@ -13,33 +13,50 @@ test('concurrentEach(empty list)', async () => {
 })
 
 test('concurrentEach(error handling)', async () => {
-  const data = 'abcde'.split('')
   let has_err = false
-  let catch_err: any
-  const preset_error = new Error('failure')
-  let revoke_count = 0
+  const concurrent = 4
+  let c = 0
   try {
-    await concurrentEach(
-      3,
-      data,
-      async (item, idx) => {
-        if (idx === 2) {
-          await timeout(100)
-          throw preset_error
-        } else {
-          revoke_count += 1
-        }
-      },
-    )
-  } catch (err) {
-    catch_err = err
+    await concurrentEach(concurrent, [1, 2, 3, 4, 5], async (_, idx) => {
+      expect(idx).not.toBe(4)
+      if (idx === 0) {
+        throw new Error('failure_1')
+      } else {
+        c += 1
+      }
+    })
+  } catch (err: any) {
     has_err = true
+    expect(err.message).toBe('failure_1')
   }
 
   expect(has_err).toBe(true)
+  expect(c).toBe( concurrent - 1 )
+})
 
-  expect(revoke_count).toBe(data.length - 1)
-  expect(catch_err).toBe(preset_error)
+test('concurrentEach(multi error)', async () => {
+  let has_err = false
+  let c = 0
+  try {
+    await concurrentEach(3, [1, 2, 3, 4, 5], async (_, idx) => {
+      if (idx === 0) {
+        await timeout(100)
+        throw new Error('failure_1')
+      } else if (idx === 1) {
+        await timeout(90)
+        throw new Error('failure_2')
+      } else {
+        await timeout(10)
+        c += 1
+      }
+    })
+  } catch (err: any) {
+    has_err = true
+    expect(err.message).toBe('failure_2')
+  }
+
+  expect(has_err).toBe(true)
+  expect(c).toBe( 3 )
 })
 
 test('concurrent_limit should be integer', async () => {

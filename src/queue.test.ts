@@ -3,6 +3,21 @@ import { Queue } from './queue'
 import { timeout } from './timeout'
 import { Wait } from './wait'
 
+test('Queue', () => {
+  expect(() => {
+    Queue(1.1)
+  }).toThrow()
+  expect(() => {
+    Queue(0.9)
+  }).toThrow()
+  expect(() => {
+    Queue(0)
+  }).toThrow()
+  expect(() => {
+    Queue('0' as any)
+  }).toThrow()
+})
+
 test('Queue 不会立即执行', async () => {
   const q = Queue()
 
@@ -153,12 +168,33 @@ test('Queue ALL_DONE signal', async () => {
   let val = 0
   q.signals.ALL_DONE.receive(() => {
     expect(q.getStatus()).toBe('pause')
-    val = 99
+    val += 1
   })
 
-  await q.task(() => Promise.resolve())
+  for (let i = 0; i < 100; ++i) {
+    q.task(() => Promise.resolve())
+  }
 
-  expect(val).toBe(99)
+  await timeout(100)
+
+  expect(val).toBe(1)
+})
+
+test('Queue ALL_DONE signal in concurrent', async () => {
+  const q = Queue(30)
+  let val = 0
+  q.signals.ALL_DONE.receive(() => {
+    expect(q.getStatus()).toBe('pause')
+    val += 1
+  })
+
+  for (let i = 0; i < 100; ++i) {
+    q.task(() => Promise.resolve())
+  }
+
+  await timeout(100)
+
+  expect(val).toBe(1)
 })
 
 test('Queue PROCESSING signal', async () => {

@@ -1,4 +1,4 @@
-import { Memo } from './memo'
+import { Memo, MemoValidatingError, MemoWithValidating } from './memo'
 
 test('Memo', async () => {
   const [getVal, setVal] = Memo(114514)
@@ -21,4 +21,18 @@ test('share Memo', () => {
 
   const m = Memo(9)
   outerFn(m)
+})
+
+test('MemoWithValidating', () => {
+  const [ getVal, setVal ] = MemoWithValidating(9, (v) => {
+    if (!Number.isInteger(v)) {
+      return 'need integer'
+    }
+  })
+  expect( getVal() ).toBe( 9 )
+  setVal( 10 )
+
+  expect(() => {
+    setVal( 1.1 )
+  }).toThrow(MemoValidatingError)
 })
