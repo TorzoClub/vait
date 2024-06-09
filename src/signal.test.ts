@@ -52,7 +52,7 @@ function ignoreConsoleWarn(fakeWarning: typeof console.warn) {
   return () => global.console = beforeConsole
 }
 
-test('Signal trigger ignore error', async () => {
+test('Signal trigger ignore error', () => {
   const sig = Signal<void>()
 
   let __val__ = 0
@@ -71,12 +71,27 @@ test('Signal trigger ignore error', async () => {
 
   sig.trigger()
 
-  await timeout(100)
-
   expect(__val__).toBe(999)
   expect(__is_call_console_warn__).toBe(true)
 
   restoreConsole()
+})
+
+test('Signal receive() return value', () => {
+  const sig = Signal()
+
+  let __val__ = 0
+  const handler = () => {
+    __val__ = 999
+  }
+  const cancel = sig.receive(handler)
+  sig.trigger()
+  expect(__val__).toBe(999)
+
+  cancel()
+  __val__ = 0
+  sig.trigger()
+  expect(__val__).toBe(0)
 })
 
 test('Signal cancelReceive()', () => {
