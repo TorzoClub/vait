@@ -27,7 +27,7 @@ type QueueSignals<P> = {
   PROCESSING: Signal<QueueTask<P>>
 }
 
-type Queue<P> = Readonly<{
+export type Queue<P> = Readonly<{
   task: AddToQueue<P>
   getStatus: MemoGetter<QueueStatus>
   getTasks: MemoGetter<QueueTask<P>[]>
