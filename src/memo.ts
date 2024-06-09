@@ -8,11 +8,7 @@ export const Memo = <D>(data: D): Memo<D> => [
   (new_data: D) => { data = new_data },
 ]
 
-export class MemoValidatingError extends Error {
-  constructor(msg: string) {
-    super(msg)
-  }
-}
+export class MemoValidatingError extends Error { }
 
 export const MemoWithValidating = <D>(
   init_data: D,
