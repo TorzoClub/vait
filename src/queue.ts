@@ -12,12 +12,9 @@ type QueueTask<P> = {
   payload: Payload<P>
 }
 
-type AddToQueue<P> =
-  P extends void ? (
-    <R>(taskFunc: TaskFunction<R>) => Promise<R>
-  ): (
-    <R>(payload: P, taskFunc: TaskFunction<R>) => Promise<R>
-  )
+type AddTaskNonePayload = <R>(taskFunc: TaskFunction<R>) => Promise<R>
+type AddTaskWithPayload<P> = <R>(payload: P, taskFunc: TaskFunction<R>) => Promise<R>
+type AddTask<P> = AddTaskNonePayload & AddTaskWithPayload<P>
 
 type QueueStatus = 'running' | 'pause'
 
@@ -28,7 +25,7 @@ type QueueSignals<P> = {
 }
 
 export type Queue<P> = Readonly<{
-  task: AddToQueue<P>
+  task: AddTask<P>
   getStatus: MemoGetter<QueueStatus>
   getTasks: MemoGetter<QueueTask<P>[]>
   setTasks: MemoSetter<QueueTask<P>[]>
