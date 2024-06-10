@@ -1,11 +1,20 @@
 import { OutterPromise } from './outter-promise'
 
 type Go<T> = (v: T) => void
-type Cancel = (reason?: unknown) => void
+type RejectWaiting = (reason?: unknown) => void
+export type Waiting<T> = Promise<T>
 
-export function Wait(): readonly [Promise<void>, Go<void>, Cancel]
-export function Wait<T>(): readonly [Promise<T>, Go<T>, Cancel]
+export class WaitingRejected extends Error {}
+
+export function Wait(): readonly [Waiting<void>, Go<void>, RejectWaiting]
+export function Wait<T>(): readonly [Waiting<T>, Go<T>, RejectWaiting]
 export function Wait<T>() {
-  const [ done, failure, waiting ] = OutterPromise<T>()
-  return [ waiting, done, failure ] as const
+  const [ resolve, reject, promise ] = OutterPromise<T>()
+  return [
+    promise,
+    resolve,
+    (cause?: unknown) => reject(
+      new WaitingRejected('Waiting was cancel', { cause })
+    )
+  ] as const
 }
