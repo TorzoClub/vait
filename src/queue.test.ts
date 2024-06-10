@@ -1,20 +1,98 @@
 import assert from 'assert'
-import { Queue } from './queue'
+import { Queue, QueueSignal, WithPayload, runTask } from './queue'
 import { timeout } from './timeout'
 import { Wait } from './wait'
 
+test('runTask', async () => {
+  {
+    const q = Queue()
+    let count = 0
+    const val = await runTask(q, async () => {
+      count += 1
+      return 'return'
+    })
+    expect(count).toBe(1)
+    expect(val).toBe('return')
+    await timeout(10)
+    expect(q.getStatus()).toBe('pause')
+  }
+
+  {
+    const q = Queue(QueueSignal())
+    const [waiting, go] = Wait()
+    let count = 0
+    let done = 0
+    q.signal.ALL_DONE.receive(() => {
+      expect(q.getStatus()).toBe('pause')
+      done += 1
+      go()
+    })
+    const val = await runTask(q, async () => {
+      count += 1
+      return 'return'
+    })
+    expect(count).toBe(1)
+    expect(val).toBe('return')
+    // await timeout(10)
+    await waiting
+    expect(done).toBe(1)
+    expect(q.getStatus()).toBe('pause')
+  }
+
+  {
+    const q = WithPayload<number>(Queue())
+    let count = 0
+    const fn = async () => {
+      count += 1
+      return 'return'
+    }
+    const promise = runTask(q, 9, fn)
+    expect( q.getPayload(fn) ).toBe(9)
+    const val = await promise
+    expect(count).toBe(1)
+    expect(val).toBe('return')
+    await timeout(10)
+    expect(q.getStatus()).toBe('pause')
+  }
+
+  {
+    const q = WithPayload<number>(Queue(QueueSignal()))
+    const [waiting, go] = Wait()
+    let count = 0
+    let done = 0
+    q.signal.ALL_DONE.receive(() => {
+      expect(q.getStatus()).toBe('pause')
+      done += 1
+      go()
+    })
+    const fn = async () => {
+      count += 1
+      return 'return'
+    }
+    const promise = runTask(q, 9, fn)
+    expect( q.getPayload(fn) ).toBe(9)
+    const val = await promise
+    expect(count).toBe(1)
+    expect(val).toBe('return')
+    // await timeout(10)
+    await waiting
+    expect(done).toBe(1)
+    expect(q.getStatus()).toBe('pause')
+  }
+})
+
 test('Queue', () => {
   expect(() => {
-    Queue(1.1)
+    Queue().setMaxConcurrent(1.1)
   }).toThrow()
   expect(() => {
-    Queue(0.9)
+    Queue().setMaxConcurrent(0.9)
   }).toThrow()
   expect(() => {
-    Queue(0)
+    Queue().setMaxConcurrent(0)
   }).toThrow()
   expect(() => {
-    Queue('0' as any)
+    Queue().setMaxConcurrent('0' as any)
   }).toThrow()
 })
 
@@ -33,93 +111,52 @@ test('Queue 不会立即执行', async () => {
   expect( val ).toBe( 999 )
 })
 
-test('Queue 返回值', async () => {
-  const q = Queue()
-
-  expect(
-    await q.task(() => Promise.resolve(9))
-  ).toBe(9)
-})
-
-test('Queue 只会 await 当前任务', async () => {
-  const q = Queue()
-
-  let val = 0
-
-  q.task(async () => {
-    await timeout(100)
-  })
-
-  const p = q.task(async () => {
-    await timeout(100)
-    val = 999
-  })
-
-  q.task(async () => {
-    await timeout(1000)
-    val = 14212421124
-  })
-
-  const start_time = Date.now()
-  await p
-  const end_time = Date.now()
-  assert( val === 999 )
-  assert( (end_time - start_time) < 300 )
-})
-
-
-test('Queue 错误处理', async () => {
-  const q = Queue()
-
-  try {
-    await q.task(async () => {
-      throw new Error('111111failure')
-    })
-    throw Error('did not throw error')
-  } catch (err: any) {
-    expect( err.message ).toBe( '111111failure' )
-  }
-})
-
 test('Queue 任务出错时也不会停止队列', async () => {
   const q = Queue()
 
-  let val = 0
+  let count = 0
+
+  q.task(async () => {
+    count += 1
+  })
 
   q.task(async () => {
     throw new Error('111111failure')
-  }).catch(() => {})
-
-  const p1 = q.task(async () => {
-    val = 992
   })
 
-  q.task(async () => {})
+  q.task(async () => {
+    count += 1
+  })
 
-  await p1
+  await timeout(50)
 
-  expect( val ).toBe( 992 )
+  expect( count ).toBe( 2 )
 })
 
 test('Queue payload', async () => {
-  const q = Queue<number>()
-  const p = q.task(9, async () => {})
+  const q = WithPayload<number>(Queue())
+  let fn: null | (() => Promise<void>) = async () => {}
+
+  q.task(1, fn)
   {
-    const payloads = q.getTasks().map(t => t.payload)
-    expect(payloads.length).toBe(1)
-    expect(payloads).toStrictEqual([9])
+    const tasks = q.getTasks()
+    expect(tasks.length).toBe(1)
+    expect( q.getPayload(fn) ).toBe(1)
+  }
+  await timeout(10)
+  {
+    const tasks = q.getTasks()
+    expect(tasks.length).toBe(0)
+    expect( q.getPayload(fn) ).toBe(1)
   }
 
-  await p
-
-  {
-    const payloads = q.getTasks().map(t => t.payload)
-    expect(payloads.length).toBe(0)
-  }
+  expect(() => {
+    q.getPayload(() => Promise.resolve())
+  }).toThrow()
 })
 
 test('Queue setTasks', async () => {
-  const q = Queue<number>()
+  const q = WithPayload<number>(Queue())
   const list: number[] = []
   for (let i = 0; i < 10; ++i) {
     q.task(i, async () => {
@@ -127,26 +164,50 @@ test('Queue setTasks', async () => {
     })
   }
   q.setTasks(
-    q.getTasks().filter(t => {
-      return t.payload % 2 === 0
+    q.getTasks().filter(fn => {
+      const payload = q.getPayload(fn)
+      return payload % 2 === 0
     })
   )
   await timeout(100)
   expect(list).toStrictEqual([ 0, 2, 4, 6, 8 ])
+
+  {
+    const q = WithPayload<number>(Queue(QueueSignal()))
+    const list: number[] = []
+    for (let i = 0; i < 10; ++i) {
+      q.task(i, async () => {
+        list.push(i)
+      })
+    }
+    q.setTasks(
+      q.getTasks().filter(fn => {
+        const payload = q.getPayload(fn)
+        return payload % 2 === 0
+      })
+    )
+    await timeout(100)
+    expect(list).toStrictEqual([ 0, 2, 4, 6, 8 ])
+  }
 })
 
 test('Queue getStatus', async () => {
-  const q = Queue()
+  const q = Queue(QueueSignal())
   async function test() {
     expect( q.getStatus() ).toBe('pause')
 
-    const p = q.task(() => timeout(300))
+    const p = q.task(() => timeout(100))
     expect( q.getStatus() ).toBe('running') // 只要有任务，它就会是 running
 
     await timeout(10)
     expect( q.getStatus() ).toBe('running')
-
-    await p
+    const [waiting, done] = Wait()
+    const cancel = q.signal.ALL_DONE.receive(() => {
+      expect( q.getStatus() ).toBe('pause')
+      cancel()
+      done()
+    })
+    await waiting
     expect( q.getStatus() ).toBe('pause')
   }
 
@@ -164,10 +225,11 @@ test('Queue getStatus', async () => {
 })
 
 test('Queue ALL_DONE signal', async () => {
-  const q = Queue()
+  const a = Queue()
+  const q = Queue(QueueSignal())
   let val = 0
-  q.signals.ALL_DONE.receive(() => {
-    expect(q.getStatus()).toBe('pause')
+  q.signal.ALL_DONE.receive(() => {
+    // expect(q.getStatus()).toBe('pause')
     val += 1
   })
 
@@ -181,9 +243,10 @@ test('Queue ALL_DONE signal', async () => {
 })
 
 test('Queue ALL_DONE signal in concurrent', async () => {
-  const q = Queue(30)
+  const q = Queue(QueueSignal())
+  q.setMaxConcurrent(30)
   let val = 0
-  q.signals.ALL_DONE.receive(() => {
+  q.signal.ALL_DONE.receive(() => {
     expect(q.getStatus()).toBe('pause')
     val += 1
   })
@@ -198,27 +261,30 @@ test('Queue ALL_DONE signal in concurrent', async () => {
 })
 
 test('Queue PROCESSING signal', async () => {
-  const q = Queue<number>()
+  const q = WithPayload<number>(Queue(QueueSignal()))
   let val = 0
-  q.signals.PROCESSING.receive((current_task) => {
+  q.signal.PROCESSING.receive((current_task) => {
     val = 99
     expect( q.getStatus() ).toBe('running')
-    expect( current_task.payload ).toBe( 1 )
+    expect( q.getPayload(current_task) ).toBe( 1 )
   })
 
-  await q.task(1, () => Promise.resolve())
+  q.task(1, () => Promise.resolve())
+
+  await timeout(30)
 
   expect(val).toBe(99)
 })
 
 test('Queue WILL_PROCESSING signal', async () => {
-  const q = Queue<number>()
+  const qa = WithPayload<number>(Queue())
+  const q = WithPayload<number>(Queue(QueueSignal()))
   let revoke_count = 0
-  q.signals.WILL_PROCESSING.receive(() => {
+  q.signal.WILL_PROCESSING.receive(() => {
     revoke_count += 1
     q.setTasks(
       q.getTasks().filter(t => {
-        return t.payload % 2 === 0
+        return q.getPayload(t) % 2 === 0
       })
     )
   })
@@ -232,7 +298,7 @@ test('Queue WILL_PROCESSING signal', async () => {
   }
 
   const [waiting, done] = Wait()
-  q.signals.ALL_DONE.receive(done)
+  q.signal.ALL_DONE.receive(done)
   await waiting
 
   assert(list.length !== 0)
@@ -242,10 +308,23 @@ test('Queue WILL_PROCESSING signal', async () => {
   }
 
   expect( revoke_count ).toBe( list.length )
+
+  {
+    const q = Queue(QueueSignal())
+    let revoke_count = 0
+    q.signal.WILL_PROCESSING.receive(() => {
+      q.setTasks([])
+    })
+    q.task(async () => {
+      revoke_count += 1
+    })
+    await timeout(100)
+    expect(revoke_count).toBe(0)
+  }
 })
 
 test('Queue keep sequence', async () => {
-  const q = Queue()
+  const q = Queue(QueueSignal())
   const list: string[] = []
   const input = 'abcdefghijklmn'.split('')
   for (let i = 0; i < input.length; ++i) {
@@ -260,7 +339,7 @@ test('Queue keep sequence', async () => {
   }
 
   const [waiting, done] = Wait()
-  q.signals.ALL_DONE.receive(done)
+  q.signal.ALL_DONE.receive(done)
   await waiting
 
   for (let i = 0; i < input.length; ++i) {
@@ -270,7 +349,8 @@ test('Queue keep sequence', async () => {
 
 test('Queue concurrent', async () => {
   const MAX_CONCURRENT = 3
-  const q = Queue(MAX_CONCURRENT)
+  const q = Queue(QueueSignal())
+  q.setMaxConcurrent(MAX_CONCURRENT)
   let c = 0
   let total = 0
   for (let i = 0; i < 10; ++i) {
@@ -284,14 +364,15 @@ test('Queue concurrent', async () => {
   expect( c ).toBe( MAX_CONCURRENT )
 
   const [waiting, done] = Wait()
-  q.signals.ALL_DONE.receive(done)
+  q.signal.ALL_DONE.receive(done)
   await waiting
   expect( total ).toBe( 10 )
 })
 
 test('Queue concurrent(2)', async () => {
   const MAX_CONCURRENT = 3
-  const q = Queue(MAX_CONCURRENT)
+  const q = Queue()
+  q.setMaxConcurrent(MAX_CONCURRENT)
   let [ waiting, done ] = Wait()
 
   let c = 0

@@ -1,6 +1,7 @@
-import { Queue } from './queue'
+import { Queue, runTask } from './queue'
 
-export function Sequence() {
-  const q = Queue()
-  return q.task
-}
+export const Sequence = (
+  q = Queue()
+) => (
+  <R>(taskFunc: () => Promise<R>): Promise<R> => runTask(q, taskFunc)
+)

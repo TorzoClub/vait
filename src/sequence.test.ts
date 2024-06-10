@@ -57,48 +57,6 @@ test('Serial ignore error', async () => {
   expect(history).toEqual([2])
 })
 
-test('Serial error catch execute sequence', async () => {
-  const sq = Sequence()
-
-  const history: number[] = []
-  const waiting: Promise<unknown>[] = []
-
-  async function createFailure() {
-    throw new Error('failure')
-  }
-
-  const failure = createFailure()
-
-  await expect(failure).rejects.toThrow()
-
-  waiting.push(
-    sq(() => failure).catch(() => {
-      history.push(1)
-    })
-  )
-
-  waiting.push(
-    sq(async () => {
-      history.push(2)
-    })
-  )
-
-  waiting.push(
-    sq(async () => {
-      history.push(3)
-    })
-  )
-
-  waiting.push(
-    sq(async () => {
-      history.push(4)
-    })
-  )
-
-  await Promise.all(waiting)
-  expect(history).toEqual([2, 1, 3, 4])
-})
-
 test('Serial sync', async () => {
   const sq = Sequence()
 

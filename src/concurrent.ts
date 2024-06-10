@@ -1,8 +1,11 @@
 import { Queue } from './queue'
+import { Sequence } from './sequence'
 
 export function Concurrent(init_max_concurrent: number) {
-  const q = Queue(init_max_concurrent)
-  return Object.assign(q.task, {
+  const q = Queue()
+  q.setMaxConcurrent(init_max_concurrent)
+  const runTask = Sequence(q)
+  return Object.assign(runTask, {
     setMaxConcurrent: q.setMaxConcurrent
   })
 }

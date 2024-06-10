@@ -1,37 +1,73 @@
-import { Memo, MemoGetter, MemoSetter, MemoWithValidating } from './memo'
-import { nextTick } from './next-tick'
+import { Memo, MemoGetter, MemoSetter, ValidatingMemo } from './memo'
+import { Signal, removeByItem } from './signal'
 import { OutterPromise } from './outter-promise'
-import { Signal } from './signal'
+import { nextTick } from './next-tick'
 
 type TaskFunction<R> = () => Promise<R>
+type QueueTask = TaskFunction<void>
 
-type Payload<P> = P
-
-type QueueTask<P> = {
-  func: () => Promise<void>
-  payload: Payload<P>
-}
-
-type AddTaskNonePayload = <R>(taskFunc: TaskFunction<R>) => Promise<R>
-type AddTaskWithPayload<P> = <R>(payload: P, taskFunc: TaskFunction<R>) => Promise<R>
-type AddTask<P> = AddTaskNonePayload & AddTaskWithPayload<P>
+type AddTaskNonePayload = (taskFunc: QueueTask) => void
+type AddTaskWithPayload<P> = (payload: P, taskFunc: QueueTask) => void
 
 type QueueStatus = 'running' | 'pause'
 
-type QueueSignals<P> = {
+type QueueSignal = {
   ALL_DONE: Signal<void>
   WILL_PROCESSING: Signal<void>
-  PROCESSING: Signal<QueueTask<P>>
+  PROCESSING: Signal<QueueTask>
 }
 
-export type Queue<P> = Readonly<{
-  task: AddTask<P>
+export type Queue = {
   getStatus: MemoGetter<QueueStatus>
-  getTasks: MemoGetter<QueueTask<P>[]>
-  setTasks: MemoSetter<QueueTask<P>[]>
-  signals: QueueSignals<P>
+  getTasks: MemoGetter<QueueTask[]>
+  setTasks: MemoSetter<QueueTask[]>
+  dropTask: (taskFunc: QueueTask) => void
   setMaxConcurrent: MemoSetter<number>
-}>
+  task: AddTaskNonePayload
+  signal: undefined
+}
+
+export type QueueWithSignal = Omit<Queue, 'signal'> & {
+  signal: QueueSignal
+}
+
+export type QueueWithPayload<P, Q extends (Queue | QueueWithSignal)> = Omit<Q, 'task'> & {
+  getPayload: (taskFunc: TaskFunction<unknown>) => P
+  task: AddTaskWithPayload<P>
+  setPayload: (taskFunc: TaskFunction<unknown>, payload: P) => void
+  payload_map: WeakMap<QueueTask, P>
+}
+
+export function WithPayload<P>(q: Queue): QueueWithPayload<P, Queue>
+export function WithPayload<P>(q: QueueWithSignal): QueueWithPayload<P, QueueWithSignal>
+export function WithPayload<
+  P
+>(q: Queue | QueueWithSignal) {
+  const payload_map = new WeakMap<TaskFunction<unknown>, P>()
+
+  function addTask(payload: P, taskFunc: QueueTask) {
+    setPayload(taskFunc, payload)
+    q.task(taskFunc)
+  }
+
+  function setPayload(taskFunc: TaskFunction<unknown>, payload: P) {
+    payload_map.set(taskFunc, payload)
+  }
+
+  return {
+    ...q,
+    task: addTask,
+    payload_map,
+    setPayload,
+    getPayload(taskFunc: TaskFunction<unknown>): P {
+      if (!payload_map.has(taskFunc)) {
+        throw new Error('getPayload failure: taskFunc not found')
+      } else {
+        return payload_map.get(taskFunc) as P
+      }
+    },
+  }
+}
 
 function validateMaxConcurrent(v: number) {
   if (!Number.isInteger(v)) {
@@ -41,89 +77,137 @@ function validateMaxConcurrent(v: number) {
   }
 }
 
-export function Queue(init_max_concurrent?: number): Queue<void>
-export function Queue<P>(init_max_concurrent?: number): Queue<P>
-export function Queue<P>(init_max_concurrent = 1) {
-  const [getTasks, setTasks] = Memo<QueueTask<P>[]>([])
+export function QueueSignal(): QueueSignal {
+  const signal = {
+    PROCESSING: Signal<QueueTask>(),
+    WILL_PROCESSING: Signal(),
+    ALL_DONE: Signal(),
+  }
+  return signal
+}
+
+
+export function Queue(): Queue
+export function Queue<S extends QueueSignal>(signal?: S): (
+  [S] extends [void] ? Queue : QueueWithSignal
+)
+export function Queue<S extends void | QueueSignal>(signal?: S) {
+  const [getTasks, setTasks] = Memo<QueueTask[]>([])
   const [getStatus, setStatus] = Memo<QueueStatus>('pause')
-  const [getMaxConcurrent, setMaxConcurrent] = MemoWithValidating<number>(
-    init_max_concurrent,
+  const [getMaxConcurrent, setMaxConcurrent] = ValidatingMemo<number>(
+    Memo(1),
     validateMaxConcurrent,
   )
 
-  const signals = {
-    PROCESSING: Signal<QueueTask<P>>(),
-    WILL_PROCESSING: Signal(),
-    ALL_DONE: Signal()
+  function dropTask(task: QueueTask) {
+    setTasks(
+      removeByItem(getTasks(), task)
+    )
   }
 
   async function run() {
-    if (getStatus() === 'running') {
-      return
+    if (getStatus() === 'pause') {
+      setStatus('running')
+      running()
     }
-    setStatus('running')
+  }
 
+  async function running() {
+    let current_concurrent = 0
     await nextTick()
 
-    let current_concurrent = 0
+    function after() {
+      if (getStatus() === 'running') {
+        if (
+          (getTasks().length === 0) &&
+          (current_concurrent === 1)
+        ) {
+          setStatus('pause')
+          signal?.ALL_DONE.trigger()
+        } else {
+          current_concurrent -= 1
+          callConcurrent()
+        }
+      }
+    }
+
     callConcurrent()
-    async function callConcurrent() {
+    function callConcurrent() {
       while (
-        (getStatus() === 'running') &&
         (current_concurrent < getMaxConcurrent()) &&
         (getTasks().length > 0)
       ) {
-        current_concurrent += 1
-        processing().then(() => {
-          current_concurrent -= 1
-          callConcurrent()
-        })
+        signal?.WILL_PROCESSING.trigger()
+
+        if (getTasks().length === 0) {
+          after()
+        } else {
+          const [ taskFunc ] = getTasks()
+          dropTask( taskFunc )
+
+          current_concurrent += 1
+
+          taskFunc().then(after).catch(after)
+          signal?.PROCESSING.trigger(taskFunc)
+        }
       }
     }
   }
 
-  async function processing() {
-    signals['WILL_PROCESSING'].trigger()
-
-    const [current_task, ...remain_tasks] = getTasks()
-    setTasks(remain_tasks)
-
-    signals['PROCESSING'].trigger(current_task)
-
-    await current_task.func()
-
-    if (remain_tasks.length === 0) {
-      setStatus('pause')
-      signals['ALL_DONE'].trigger()
-    }
+  function addTask(taskFunc: QueueTask) {
+    setTasks(
+      getTasks().concat(taskFunc)
+    )
+    run()
   }
 
-  function task<R>(payload: P, taskFunc: TaskFunction<R>): Promise<R>
-  function task<R>(taskFunc: TaskFunction<R>): Promise<R>
-  async function task<R>(payload: P | TaskFunction<R>, taskFunc?: TaskFunction<R>) {
-    if (taskFunc) {
-      const [resolve, reject, promise] = OutterPromise<R>()
-      setTasks(
-        getTasks().concat({
-          payload: payload as P,
-          func: () => (
-            taskFunc().then(resolve).catch(reject)
-          )
-        })
-      )
-      run()
-      return promise
-    } else {
-      return task(undefined as P, payload as TaskFunction<R>)
-    }
-  }
-
-  return {
-    task,
+  const queue = {
+    task: addTask,
+    dropTask,
     getStatus,
     getTasks,
     setTasks,
-    signals,
+    signal,
     setMaxConcurrent,
-  } as const
+  }
+  return queue as (
+    [S] extends [void] ? Queue : QueueWithSignal
+  )
+}
+
+export function runTask<R>(
+  queue: Queue | QueueWithSignal,
+  taskFunc: TaskFunction<R>,
+): Promise<R>
+export function runTask<R, P>(
+  queue: QueueWithPayload<P, Queue> | QueueWithPayload<P, QueueWithSignal>,
+  payload: P,
+  taskFunc: TaskFunction<R>,
+): Promise<R>
+export function runTask<
+  R,
+  P,
+  Q extends Queue | QueueWithSignal,
+  QP extends QueueWithPayload<P, Queue> | QueueWithPayload<P, QueueWithSignal>
+>(
+  queue: [P] extends void ? Q : QP,
+  payload: P | TaskFunction<R>,
+  taskFunc?: TaskFunction<R>,
+): Promise<R> {
+  const [resolve, reject, promise] = OutterPromise<R>()
+
+  if (queue.setPayload !== undefined) {
+    queue.setPayload(taskFunc as TaskFunction<R>, payload as P)
+  }
+
+  if (taskFunc) {
+    queue.task(payload as P, () => (
+      taskFunc().then(resolve).catch(reject)
+    ))
+  } else {
+    (queue.task as AddTaskNonePayload)(() => (
+      (payload as TaskFunction<R>)().then(resolve).catch(reject)
+    ))
+  }
+  return promise
 }
