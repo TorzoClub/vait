@@ -53,7 +53,28 @@ test('WatchMemo cannot set memo in watcher', () => {
   global.console = beforeConsole
 })
 
-test('watching ValidatingMemo', () => {
+test('watching ValidatingMemo By ValidatingMemo(WatchMemo(Memo', () => {
+  const [get, set, watch] = WatchMemo(Memo(0))
+  let changed = 0
+  watch(() => {
+    changed +=1
+  })
+
+  const [, vSet] = ValidatingMemo([get, set], (v) => {
+    if (v < 0) return 'failure'
+  })
+
+  expect(changed).toBe(0)
+
+  vSet(2)
+  expect(get()).toBe(2)
+  expect(changed).toBe(1)
+
+  expect(() => vSet(-222)).toThrow(MemoValidatingError)
+  expect(changed).toBe(1)
+})
+
+test('watching ValidatingMemo By WatchMemo(ValidatingMemo(Memo', () => {
   const [get, set, watch] = WatchMemo(ValidatingMemo(Memo(0), (v) => {
     if (v < 0) return 'failure'
   }))

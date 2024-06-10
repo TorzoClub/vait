@@ -24,15 +24,22 @@ test('share Memo', () => {
 })
 
 test('MemoWithValidating', () => {
-  const [ getVal, setVal ] = ValidatingMemo(Memo(9), (v) => {
+  const validator = (v: number) => {
     if (!Number.isInteger(v)) {
       return 'need integer'
     }
-  })
+  }
+  const [ getVal, setVal ] = ValidatingMemo(Memo(9), validator)
   expect( getVal() ).toBe( 9 )
   setVal( 10 )
 
   expect(() => {
     setVal( 1.1 )
   }).toThrow(MemoValidatingError)
+
+  {
+    expect(() => {
+      ValidatingMemo(Memo(1.1), validator)
+    }).toThrow(MemoValidatingError)
+  }
 })

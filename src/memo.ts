@@ -16,15 +16,18 @@ export const ValidatingMemo = <D>(
 ) => {
   const [getData, innerSetData] = memo
 
-  setData(getData())
+  validating(getData())
 
-  function setData(val: D) {
+  function validating(val: D) {
     const res = validator(val)
     if (res !== undefined) {
       throw new MemoValidatingError(res)
-    } else {
-      innerSetData(val)
     }
+  }
+
+  function setData(val: D) {
+    validating(val)
+    innerSetData(val)
   }
 
   return [ getData, setData ] as const
