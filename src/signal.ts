@@ -1,4 +1,5 @@
 import { Memo } from './memo'
+import { Wait } from './wait'
 
 export type Handler<P> = (payload: P) => void
 export type Handlers<P> = Handler<P>[]
@@ -10,12 +11,8 @@ export const removeByItem = <T>(list: T[], remove_item: T) =>
 // 进而会影响调用方的代码执行，这是不太好的
 // 故 executeHandlers 将会忽略错误，并将跳过当前出错的函数
 // 继续执行队列中余下的函数
-export function executeHandlers<P>(
-  handlers: Handlers<P>,
-  payload: P,
-  i = 0
-) {
-  for (; i < handlers.length; ++i) {
+export function executeHandlers<P>(handlers: Handlers<P>, payload: P) {
+  for (let i = 0; i < handlers.length; ++i) {
     try {
       handlers[i](payload)
     } catch (err) {
@@ -42,8 +39,22 @@ export function Signal<P>(): Signal<P> {
     trigger: payload => executeHandlers(getHandlers(), payload),
     cancelReceive,
     receive(fn) {
-      setHandlers([...getHandlers(), fn])
+      setHandlers(getHandlers().concat(fn))
       return () => cancelReceive(fn)
     },
   } as const
+}
+
+Signal.once = <P>(sig: Signal<P>, fn: Handler<P>) => {
+  const cancel = sig.receive((p) => {
+    cancel()
+    fn(p)
+  })
+  return cancel
+}
+
+Signal.wait = <P>(sig: Signal<P>) => {
+  const [ waiting, done ] = Wait<P>()
+  Signal.once(sig, done)
+  return waiting
 }

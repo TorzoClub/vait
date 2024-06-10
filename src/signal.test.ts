@@ -1,6 +1,4 @@
 import { Signal } from './signal'
-import { timeout } from './timeout'
-import { Wait } from './wait'
 
 test('Signal', () => {
   const obj = Signal()
@@ -175,7 +173,6 @@ jest.setTimeout(30000)
 test('Signal a large quantity error handlers', async () => {
   const restoreConsole = ignoreConsoleWarn(() => {})
 
-  const [wait, go] = Wait()
   const sig = Signal()
   let l = -1
   const HANDLER_NUMBER = 10_000
@@ -186,14 +183,42 @@ test('Signal a large quantity error handlers', async () => {
     })
   }
 
-  sig.receive(() => {
-    go()
-  })
+  const waiting = Signal.wait(sig)
 
   sig.trigger()
 
-  await wait
+  await waiting
   restoreConsole()
 
   expect(l).toBe(HANDLER_NUMBER - 1)
+})
+
+test('Signal.once', async () => {
+  const sig = Signal<9>()
+  let call_count = 0
+  Signal.once(sig, (p) => {
+    call_count += 1
+    expect(p).toBe(9)
+  })
+  sig.trigger(9)
+  expect(call_count).toBe( 1 )
+  sig.trigger(9)
+  expect(call_count).toBe( 1 )
+  sig.trigger(9)
+  expect(call_count).toBe( 1 )
+})
+
+test('Signal.wait', async () => {
+  {
+    const sig = Signal()
+    const p = Signal.wait(sig)
+    sig.trigger()
+    await p
+  }
+  {
+    const sig = Signal<1>()
+    const p = Signal.wait(sig)
+    sig.trigger( 1 )
+    expect( await p ).toBe( 1 )
+  }
 })
