@@ -1,4 +1,4 @@
-import { Memo, MemoValidatingError, MemoWithValidating } from './memo'
+import { Memo, MemoValidatingError, ValidatingMemo } from './memo'
 
 test('Memo', async () => {
   const [getVal, setVal] = Memo(114514)
@@ -24,7 +24,7 @@ test('share Memo', () => {
 })
 
 test('MemoWithValidating', () => {
-  const [ getVal, setVal ] = MemoWithValidating(9, (v) => {
+  const [ getVal, setVal ] = ValidatingMemo(Memo(9), (v) => {
     if (!Number.isInteger(v)) {
       return 'need integer'
     }

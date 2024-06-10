@@ -17,30 +17,26 @@ export type WatchMemo<D> = Readonly<[...Memo<D>, SetMemoWatcher<D>]>
 
 export class WatchMemoError extends Error {}
 
-export const WatchMemo = <D>(init_data: D): WatchMemo<D> => {
+export const WatchMemo = <D>(
+  [ get, set ]: Memo<D>
+): WatchMemo<D> => {
   const [ canChange, setChangeState ] = Memo(true)
-  const [ get, set ] = Memo(init_data)
   const changed_signal = Signal<D>()
-
   return [
     get,
     function change(new_data: D) {
-      if (canChange()) {
-        setChangeState(false)
-        set(new_data)
-        changed_signal.trigger(new_data)
+      try {
+        if (canChange()) {
+          setChangeState(false)
+          set(new_data)
+          changed_signal.trigger(new_data)
+        } else {
+          throw new WatchMemoError('cannot change memo in watcher')
+        }
+      } finally {
         setChangeState(true)
-      } else {
-        throw new WatchMemoError('cannot change memo in watcher')
       }
     },
-    function SetWatcher(cb) {
-      changed_signal.receive(cb)
-      return (
-        function RemoveWatcher() {
-          changed_signal.cancelReceive(cb)
-        }
-      )
-    }
+    changed_signal.receive
   ]
 }

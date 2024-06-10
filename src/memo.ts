@@ -10,12 +10,13 @@ export const Memo = <D>(data: D): Memo<D> => [
 
 export class MemoValidatingError extends Error { }
 
-export const MemoWithValidating = <D>(
-  init_data: D,
+export const ValidatingMemo = <D>(
+  memo: Memo<D>,
   validator: (i: D) => void | string
 ) => {
-  const [getData, innerSetData] = Memo<D>(init_data)
-  setData(init_data)
+  const [getData, innerSetData] = memo
+
+  setData(getData())
 
   function setData(val: D) {
     const res = validator(val)
