@@ -1,4 +1,5 @@
-import { concurrentEach } from "./concurrent-each"
+import { concurrentEach } from './concurrent-each'
+import { Memo } from './memo'
 
 export function concurrentMap<T, NT>(
   __CONCURRENT_LIMIT: number,
@@ -10,10 +11,13 @@ export function concurrentMap<T, NT>(
   } else {
     const new_list: NT[] = []
     return (
-      concurrentEach(__CONCURRENT_LIMIT, list, async (item, idx, total) => {
-        new_list[idx] = await asyncFn(item, idx, total)
-      })
-      .then(() => new_list)
+      concurrentEach(
+        Memo(__CONCURRENT_LIMIT),
+        list[Symbol.iterator](),
+        async (item, idx) => {
+          new_list[idx] = await asyncFn(item, idx, list)
+        }
+      ).then(() => new_list)
     )
   }
 }

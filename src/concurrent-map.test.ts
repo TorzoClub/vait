@@ -1,7 +1,10 @@
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 // const assert = require('power-assert')
 
+import { concurrentEach } from './concurrent-each'
 import { concurrentMap } from './concurrent-map'
+import { Memo } from './memo'
+import { nextTick } from './next-tick'
 import { timeout } from './timeout'
 
 test('concurrentMap', async () => {
@@ -12,7 +15,7 @@ test('concurrentMap', async () => {
     data,
     async (item, idx) => {
       expect(item).toBe(data[idx])
-      await timeout(Math.floor(Math.random() * 1000))
+      await timeout(Math.floor(Math.random() * 100))
       return idx
     }
   )
@@ -33,10 +36,18 @@ test('concurrentMap(single item list)', async () => {
   expect(new_data).toStrictEqual([2])
 })
 
+
+function * arrayGen<T>(list: T[]) {
+  for (let i = 0; i < list.length; ++i) {
+    yield list[i]
+  }
+}
+
 test('concurrentMap(big list length)', async () => {
   async function test(data_length: number, concurrent_count: number) {
-    const data = Array.from(Array(data_length))
+    const data = Array.from(Array(data_length)).map((_, idx) => idx)
     const new_data = await concurrentMap(concurrent_count, data, async (item, idx) => {
+      await nextTick()
       return idx
     })
     for (let i = 0; i < new_data.length; ++ i) {
@@ -45,9 +56,10 @@ test('concurrentMap(big list length)', async () => {
   }
 
   await Promise.all([
-    test(5000, 5000),
+    test(7, 1),
+    test(5000, 50),
     test(100, 5000),
-    test(5000, 1000)
+    test(1000, 999),
   ])
 })
 
@@ -63,7 +75,7 @@ test('concurrentMap(error handling)', async () => {
       data,
       async (item, idx) => {
         if (idx === 2) {
-          await timeout(1000)
+          await timeout(100)
           throw preset_error
         } else {
           revoke_count += 1
@@ -79,8 +91,6 @@ test('concurrentMap(error handling)', async () => {
 
   expect(revoke_count).toBe(data.length - 1)
   expect(catch_err).toBe(preset_error)
-
-  await timeout(1000)
 })
 
 test('should process all items with a limit of 1', async () => {
