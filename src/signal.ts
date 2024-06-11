@@ -1,11 +1,9 @@
 import { Memo } from './memo'
+import { removeByItem } from './utils'
 import { Wait } from './wait'
 
 export type Handler<P> = (payload: P) => void
 export type Handlers<P> = Handler<P>[]
-
-export const removeByItem = <T>(list: T[], remove_item: T) =>
-  list.filter((item) => item !== remove_item)
 
 // 执行注册队列中的函数时，如果函数内部如果出错了的话，
 // 进而会影响调用方的代码执行，这是不太好的

@@ -160,13 +160,18 @@ test('Signal isEmpty()', () => {
 
 test('Signal a large quantity handlers', () => {
   const sig = Signal()
-  let l = -1
-  const HANDLER_NUMBER = 50_000
+  let l = -100
+  let c = 0
+  const HANDLER_NUMBER = 10_000
   for (let i = 0; i < HANDLER_NUMBER; ++i) {
-    sig.receive(() => l = i)
+    sig.receive(() => {
+      c += 1
+      l = i
+    })
   }
   sig.trigger()
   expect(l).toBe(HANDLER_NUMBER - 1)
+  expect(c).toBe(HANDLER_NUMBER)
 })
 
 jest.setTimeout(30000)
@@ -174,10 +179,12 @@ test('Signal a large quantity error handlers', async () => {
   const restoreConsole = ignoreConsoleWarn(() => {})
 
   const sig = Signal()
-  let l = -1
+  let l = -100
+  let c = 0
   const HANDLER_NUMBER = 10_000
   for (let i = 0; i < HANDLER_NUMBER; ++i) {
     sig.receive(() => {
+      c += 1
       l = i
       throw new Error('test')
     })
@@ -191,6 +198,7 @@ test('Signal a large quantity error handlers', async () => {
   restoreConsole()
 
   expect(l).toBe(HANDLER_NUMBER - 1)
+  expect(c).toBe(HANDLER_NUMBER)
 })
 
 test('Signal.once', async () => {
