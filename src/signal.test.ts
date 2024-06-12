@@ -1,4 +1,4 @@
-import { Signal } from './signal'
+import { Signal, SignalError } from './signal'
 
 test('Signal', () => {
   const obj = Signal()
@@ -73,6 +73,23 @@ test('Signal trigger ignore error', () => {
   expect(__is_call_console_warn__).toBe(true)
 
   restoreConsole()
+})
+
+test('Signal.triggerCareError() should throw error', () => {
+  const sig = Signal()
+  sig.receive(() => {
+    throw 233
+  })
+  expect(() => sig.triggerCareError()).toThrow(SignalError)
+
+  let catched = false
+  try {
+    sig.triggerCareError()
+  } catch (err: any) {
+    catched = true
+    expect(err.cause).toBe(233)
+  }
+  expect(catched).toBe(true)
 })
 
 test('Signal receive() return value', () => {
