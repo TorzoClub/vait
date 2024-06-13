@@ -1,9 +1,14 @@
 import { Queue, QueueSignal, QueueWithPayload, QueueWithSignal, WithPayload } from './queue'
+import { Signal } from './signal'
 
 export type QueuePool<ID, Payload> = {
   getQueue: (id: ID) => QueueWithPayload<Payload, QueueWithSignal>,
   hasQueue: (id: ID) => boolean,
   addTask: AddTask<ID, Payload>,
+  signal: {
+    ALL_DONE: Signal,
+    ERROR: Signal<{ id: ID, payload: Payload, error: unknown }>
+  }
 }
 
 type AddTaskNonePayload<ID> = (id: ID, func: () => Promise<void>) => void
@@ -15,6 +20,12 @@ export function QueuePool<ID>(): QueuePool<ID, void>
 export function QueuePool<ID, Payload>(): QueuePool<ID, Payload>
 export function QueuePool<ID, Payload>(): QueuePool<ID, Payload> {
   const pool = new Map<ID, QueueWithPayload<Payload, QueueWithSignal>>()
+
+  const signal = {
+    ALL_DONE: Signal(),
+    ERROR: Signal<{ id: ID, payload: Payload, error: unknown }>()
+  }
+
 
   function createQueue(id: ID) {
     const q = WithPayload<Payload>(Queue(QueueSignal()))
@@ -47,10 +58,22 @@ export function QueuePool<ID, Payload>(): QueuePool<ID, Payload> {
 
       q.task(payload as Payload, func)
 
+      const cancelReceiveError = q.signal.ERROR.receive(({ task, error }) => {
+        signal.ERROR.trigger({
+          id,
+          payload: q.getPayload(task),
+          error,
+        })
+      })
+
       if (q.signal.ALL_DONE.isEmpty()) {
         const cancel = q.signal.ALL_DONE.receive(() => {
+          cancelReceiveError()
           cancel()
           pool.delete(id)
+          if (pool.size === 0) {
+            signal.ALL_DONE.trigger()
+          }
         })
       }
     }
@@ -60,5 +83,6 @@ export function QueuePool<ID, Payload>(): QueuePool<ID, Payload> {
     addTask,
     getQueue,
     hasQueue: (id: ID) => pool.has(id),
+    signal,
   }
 }
