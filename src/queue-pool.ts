@@ -1,9 +1,14 @@
 import { Queue, QueueSignal, QueueWithPayload, QueueWithSignal, WithPayload } from './queue'
 import { Signal } from './signal'
+import { Memo } from './memo'
+import { Sequence } from './sequence'
+import { Wait } from './wait'
 
 export type QueuePool<ID, Payload> = {
   getQueue: (id: ID) => QueueWithPayload<Payload, QueueWithSignal>,
   hasQueue: (id: ID) => boolean,
+  pause(): void
+  resume(): void
   addTask: AddTask<ID, Payload>,
   signal: {
     ALL_DONE: Signal,
@@ -19,13 +24,14 @@ export function QueuePool(): QueuePool<'You must be provide ID parameter', void>
 export function QueuePool<ID>(): QueuePool<ID, void>
 export function QueuePool<ID, Payload>(): QueuePool<ID, Payload>
 export function QueuePool<ID, Payload>(): QueuePool<ID, Payload> {
+  const [getPause, setPause] = Memo<Wait | null>(null)
+
   const pool = new Map<ID, QueueWithPayload<Payload, QueueWithSignal>>()
 
   const signal = {
     ALL_DONE: Signal(),
     ERROR: Signal<{ id: ID, payload: Payload, error: unknown }>()
   }
-
 
   function createQueue(id: ID) {
     const q = WithPayload<Payload>(Queue(QueueSignal()))
@@ -54,8 +60,14 @@ export function QueuePool<ID, Payload>(): QueuePool<ID, Payload> {
     if (typeof func !== 'function') {
       return addTask(id, undefined as Payload, payload as (() => Promise<void>))
     } else {
+      // const pause = getPause()
+      // if (pause !== null) {
+      //   const [waiting] = pause
+      //   waiting.then(() => {
+      //     addTask(id, payload as Payload, func)
+      //   })
+      // }
       const q = getQueue(id)
-
       q.task(payload as Payload, func)
 
       const cancelReceiveError = q.signal.ERROR.receive(({ task, error }) => {
@@ -81,6 +93,25 @@ export function QueuePool<ID, Payload>(): QueuePool<ID, Payload> {
 
   return {
     addTask,
+    pause: () => {
+      const pause = Wait()
+      setPause(pause)
+      const [ waiting ] = pause
+      for (const queue of pool.values()) {
+        queue.setTasks([
+          () => waiting,
+          ...queue.getTasks()
+        ])
+      }
+    },
+    resume: () => {
+      const pause = getPause()
+      if (pause) {
+        const [, resume] = pause
+        setPause(null)
+        resume()
+      }
+    },
     getQueue,
     hasQueue: (id: ID) => pool.has(id),
     signal,

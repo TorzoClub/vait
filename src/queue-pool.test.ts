@@ -3,6 +3,8 @@ import { Queue } from "./queue"
 import { QueuePool } from "./queue-pool"
 import { Signal } from "./signal"
 import { timeout } from "./timeout"
+import { Timer } from "./timer"
+import { Wait } from "./wait"
 
 test('QueuePool', async () => {
   const pool = QueuePool<number>()
@@ -40,11 +42,15 @@ test('QueuePool 独立队列', async () => {
 })
 
 test('QueuePool payload', async () => {
+  const [waiting, go] = Wait()
   const pool = QueuePool<number, 'abc'|'cba'>()
-  const fn = nextTick
+  const fn = () => waiting
   pool.addTask(1, 'abc', fn)
+  // await timeout(100)
   const tasks = pool.getQueue(1).getTasks()
   expect( tasks.length ).toBe( 1 )
+
+  go()
 
   expect(
     pool.getQueue(1).getPayload(fn)
@@ -79,10 +85,63 @@ test('QueuePool ERROR signal', async () => {
 
 test('QueuePool ALL_DONE signal', async () => {
   const pool = QueuePool<number, 'a'|'b'>()
+  const [ waiting, ok ] = Wait()
   let r = 0
+
   pool.addTask(2, 'b', async () => {
     r += 1
+    return waiting
   })
+
+  pool.addTask(2, 'b', async () => {
+    r += 1
+    return waiting
+  })
+
+  pool.addTask(1, 'b', async () => {
+    r += 1
+    return waiting
+  })
+
+  pool.addTask(4, 'b', async () => {
+    r += 1
+    return waiting
+  })
+
+  Timer(100, ok)
+
   await Signal.wait( pool.signal.ALL_DONE )
-  expect(r).toBe(1)
+
+  expect(r).toBe(4)
+})
+
+test('QueuePool pause/resume', async () => {
+  let revoke = 0
+  const pool = QueuePool<number, 'a'|'b'>()
+  pool.addTask(1, 'a', () => {
+    revoke += 1
+    return timeout(50)
+  })
+  pool.addTask(2, 'b', () => {
+    revoke += 1
+    return timeout(50)
+  })
+  pool.pause()
+  await timeout(100)
+  expect(revoke).toBe(0)
+
+  pool.resume()
+  await Signal.wait(pool.signal.ALL_DONE)
+  expect(revoke).toBe(2)
+
+  pool.addTask(3, 'b', async () => {
+    revoke += 1
+  })
+  await Signal.wait(pool.signal.ALL_DONE)
+  expect(revoke).toBe(3)
+
+  expect(() => pool.resume()).not.toThrow()
+
+  await timeout(100)
+  expect(revoke).toBe(3)
 })
