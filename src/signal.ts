@@ -34,14 +34,14 @@ function executeHandlersCareError<P>(handlers: Handlers<P>, payload: P) {
   }
 }
 
-export interface Signal<P> {
+export interface Signal<P = void> {
   isEmpty(): boolean
   trigger(payload: P): void
   triggerCareError(payload: P): void
   receive(fn: Handler<P>): () => void
   cancelReceive(fn: Handler<P>): void
 }
-export function Signal(): Signal<void>
+export function Signal(): Signal
 export function Signal<P>(): Signal<P>
 export function Signal<P>(): Signal<P> {
   const [getHandlers, setHandlers] = Memo<Handlers<P>>([])

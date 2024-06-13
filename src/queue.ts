@@ -16,9 +16,11 @@ type AddTaskWithPayload<P> = (payload: P, taskFunc: QueueTask) => void
 type QueueStatus = 'running' | 'pause'
 
 type QueueSignal = {
+  WILL_PROCESS: Signal<void>
+  SUCCESS: Signal<QueueTask>
+  ERROR: Signal<{ task: QueueTask, error: unknown }>
+  PROCESSED: Signal<QueueTask>
   ALL_DONE: Signal<void>
-  WILL_PROCESSING: Signal<void>
-  PROCESSING: Signal<QueueTask>
 }
 
 export type Queue = {
@@ -83,8 +85,10 @@ function validateMaxConcurrent(v: number) {
 
 export function QueueSignal(): QueueSignal {
   const signal = {
-    PROCESSING: Signal<QueueTask>(),
-    WILL_PROCESSING: Signal(),
+    WILL_PROCESS: Signal(),
+    SUCCESS: Signal<QueueTask>(),
+    ERROR: Signal<{ task: QueueTask, error: unknown }>(),
+    PROCESSED: Signal<QueueTask>(),
     ALL_DONE: Signal(),
   }
   return signal
@@ -119,7 +123,7 @@ export function Queue<S extends void | QueueSignal>(signal?: S) {
   type QueueTaskIterator = Generator<QueueTask, void, unknown>
   function * QueueTaskIterator(): QueueTaskIterator {
     while (getTasks().length !== 0) {
-      signal?.WILL_PROCESSING.trigger()
+      signal?.WILL_PROCESS.trigger()
       if (getTasks().length === 0) {
         return
       } else {
@@ -137,10 +141,10 @@ export function Queue<S extends void | QueueSignal>(signal?: S) {
           getMaxConcurrent(),
           QueueTaskIterator(),
           (task) => (
-            task().catch(() => {
-            }).then(() => {
-              signal?.PROCESSING.trigger(task)
-            })
+            task()
+              .then(() => signal?.SUCCESS.trigger(task))
+              .catch((error) => signal?.ERROR.trigger({ task, error }))
+              .then(() => signal?.PROCESSED.trigger(task))
           )
         )
       )).then(() => {

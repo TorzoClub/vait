@@ -3,6 +3,7 @@ import { Queue, QueueSignal, WithPayload, runTask } from './queue'
 import { timeout } from './timeout'
 import { Wait } from './wait'
 import { Memo } from './memo'
+import { Signal } from './signal'
 
 jest.setTimeout(15000)
 
@@ -261,10 +262,10 @@ test('Queue ALL_DONE signal in concurrent', async () => {
   expect(val).toBe(1)
 })
 
-test('Queue PROCESSING signal', async () => {
+test('Queue PROCESSED signal', async () => {
   const q = WithPayload<number>(Queue(QueueSignal()))
   let val = 0
-  q.signal.PROCESSING.receive((current_task) => {
+  q.signal.PROCESSED.receive((current_task) => {
     val = 99
     expect( q.getStatus() ).toBe('running')
     expect( q.getPayload(current_task) ).toBe( 1 )
@@ -277,11 +278,11 @@ test('Queue PROCESSING signal', async () => {
   expect(val).toBe(99)
 })
 
-test('Queue WILL_PROCESSING signal', async () => {
+test('Queue WILL_PROCESS signal', async () => {
   const qa = WithPayload<number>(Queue())
   const q = WithPayload<number>(Queue(QueueSignal()))
   let revoke_count = 0
-  q.signal.WILL_PROCESSING.receive(() => {
+  q.signal.WILL_PROCESS.receive(() => {
     revoke_count += 1
     q.setTasks(
       q.getTasks().filter(t => {
@@ -313,7 +314,7 @@ test('Queue WILL_PROCESSING signal', async () => {
   {
     const q = Queue(QueueSignal())
     let revoke_count = 0
-    q.signal.WILL_PROCESSING.receive(() => {
+    q.signal.WILL_PROCESS.receive(() => {
       q.setTasks([])
     })
     q.task(async () => {
@@ -322,6 +323,53 @@ test('Queue WILL_PROCESSING signal', async () => {
     await timeout(100)
     expect(revoke_count).toBe(0)
   }
+})
+
+test('Queue SUCCESS signal', async () => {
+  const q = Queue(QueueSignal())
+
+  const err = new Error('failrexxx')
+  const failureFunc = () => Promise.reject(err)
+  q.task(failureFunc)
+  const func = () => timeout(10)
+  q.task(func)
+
+  let revoke = 0
+  q.signal.SUCCESS.receive(task => {
+    expect(task).not.toBe(err)
+    expect(task).toBe(func)
+    revoke += 1
+  })
+
+  await Signal.wait(q.signal.ALL_DONE)
+
+  expect(revoke).toBe(1)
+})
+
+test('Queue ERROR signal', async () => {
+  const q = Queue(QueueSignal())
+  q.task(async () => {
+    return timeout(10)
+  })
+  const err = new Error('failrexxx')
+  const failureFunc = () => Promise.reject(err)
+  q.task(failureFunc)
+
+  let revoke_count = 0
+  const cancelReceiveError = q.signal.ERROR.receive(res => {
+    revoke_count += 1
+    expect(res.task).toBe(failureFunc)
+    expect(res.error).toBe(err)
+  })
+
+  await Signal.wait(q.signal.ALL_DONE)
+
+  expect(revoke_count).toBe(1)
+
+  cancelReceiveError()
+  q.task(failureFunc)
+  await Signal.wait(q.signal.ALL_DONE)
+  expect(revoke_count).toBe(1)
 })
 
 test('Queue keep sequence', async () => {
