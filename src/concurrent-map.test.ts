@@ -1,9 +1,7 @@
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 // const assert = require('power-assert')
 
-import { concurrentEach } from './concurrent-each'
 import { concurrentMap } from './concurrent-map'
-import { Memo } from './memo'
 import { nextTick } from './next-tick'
 import { timeout } from './timeout'
 
