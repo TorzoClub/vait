@@ -1,20 +1,24 @@
-import { Memo } from './memo'
+import { Memo, ChangedSignal, WithValidating } from './memo'
 import { Wait } from './wait'
 
 const NONE_ERROR = Symbol('NONE_ERROR')
 
 export async function concurrentEach<T>(
-  MaxConcurrentMemo: Memo<number>,
+  init_max_concurrent: number,
   iterator: IterableIterator<T>,
   asyncFn: (item: T, idx: number) => Promise<void>,
 ): Promise<void> {
-  const [ getMaxConcurrent ] = MaxConcurrentMemo
+  const [MaxConcurrentMemo, watch] = ChangedSignal(
+    WithValidating(Memo(init_max_concurrent), v => {
+      if (v < 1) {
+        throw new RangeError('concurrent_limit should >= 1')
+      } else if (!Number.isInteger(v)) {
+        throw new TypeError('concurrent_limit should be integer')
+      }
+    })
+  )
 
-  if (getMaxConcurrent() < 1) {
-    throw new RangeError('concurrent_limit should >= 1')
-  } else if (!Number.isInteger(getMaxConcurrent())) {
-    throw new TypeError('concurrent_limit should be integer')
-  }
+  const [ getMaxConcurrent ] = MaxConcurrentMemo
 
   let current_concurrent = 0
   let __idx = 0
@@ -44,6 +48,10 @@ export async function concurrentEach<T>(
     }
   }
 
+  const cancelWatch = watch(() => {
+    callConcurrent()
+  })
+
   callConcurrent()
   function callConcurrent() {
     while (
@@ -68,6 +76,7 @@ export async function concurrentEach<T>(
   }
 
   return waiting.then(() => {
+    cancelWatch()
     if (error_info !== NONE_ERROR) {
       throw error_info
     }
