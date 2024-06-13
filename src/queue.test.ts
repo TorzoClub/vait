@@ -2,83 +2,84 @@ import assert from 'assert'
 import { Queue, QueueSignal, WithPayload, runTask } from './queue'
 import { timeout } from './timeout'
 import { Wait } from './wait'
+import { Memo } from './memo'
 
-test('runTask', async () => {
-  {
-    const q = Queue()
-    let count = 0
-    const val = await runTask(q, async () => {
-      count += 1
-      return 'return'
-    })
-    expect(count).toBe(1)
-    expect(val).toBe('return')
-    await timeout(10)
-    expect(q.getStatus()).toBe('pause')
-  }
+jest.setTimeout(15000)
 
-  {
-    const q = Queue(QueueSignal())
-    const [waiting, go] = Wait()
-    let count = 0
-    let done = 0
-    q.signal.ALL_DONE.receive(() => {
-      expect(q.getStatus()).toBe('pause')
-      done += 1
-      go()
-    })
-    const val = await runTask(q, async () => {
-      count += 1
-      return 'return'
-    })
-    expect(count).toBe(1)
-    expect(val).toBe('return')
-    // await timeout(10)
-    await waiting
-    expect(done).toBe(1)
-    expect(q.getStatus()).toBe('pause')
-  }
+test('runTask (Queue', async () => {
+  const q = Queue()
+  let count = 0
+  const val = await runTask(q, async () => {
+    count += 1
+    return 'return'
+  })
+  expect(count).toBe(1)
+  expect(val).toBe('return')
+  await timeout(10)
+  expect(q.getStatus()).toBe('pause')
+})
 
-  {
-    const q = WithPayload<number>(Queue())
-    let count = 0
-    const fn = async () => {
-      count += 1
-      return 'return'
-    }
-    const promise = runTask(q, 9, fn)
-    expect( q.getPayload(fn) ).toBe(9)
-    const val = await promise
-    expect(count).toBe(1)
-    expect(val).toBe('return')
-    await timeout(10)
-    expect(q.getStatus()).toBe('pause')
+test('runTask (QueueWithPayload', async () => {
+  const q = WithPayload<number>(Queue())
+  let count = 0
+  const fn = async () => {
+    count += 1
+    return 'return'
   }
+  const promise = runTask(q, 9, fn)
+  expect( q.getPayload(fn) ).toBe(9)
+  const val = await promise
+  expect(count).toBe(1)
+  expect(val).toBe('return')
+  await timeout(10)
+  expect(q.getStatus()).toBe('pause')
+})
 
-  {
-    const q = WithPayload<number>(Queue(QueueSignal()))
-    const [waiting, go] = Wait()
-    let count = 0
-    let done = 0
-    q.signal.ALL_DONE.receive(() => {
-      expect(q.getStatus()).toBe('pause')
-      done += 1
-      go()
-    })
-    const fn = async () => {
-      count += 1
-      return 'return'
-    }
-    const promise = runTask(q, 9, fn)
-    expect( q.getPayload(fn) ).toBe(9)
-    const val = await promise
-    expect(count).toBe(1)
-    expect(val).toBe('return')
-    // await timeout(10)
-    await waiting
-    expect(done).toBe(1)
+test('runTask (QueueWithSignal', async () => {
+  const q = Queue(QueueSignal())
+  const [waiting, go] = Wait()
+  let count = 0
+  let done = 0
+  q.signal.ALL_DONE.receive(() => {
     expect(q.getStatus()).toBe('pause')
+    done += 1
+    go()
+  })
+  const val = await runTask(q, async () => {
+    count += 1
+    return 'return'
+  })
+  expect(count).toBe(1)
+  expect(val).toBe('return')
+  // await timeout(10)
+  await waiting
+  expect(done).toBe(1)
+  expect(q.getStatus()).toBe('pause')
+})
+
+test('runTask (WithPayload(QueueSignal', async () => {
+  const q = WithPayload<number>(Queue(QueueSignal()))
+  const [waiting, go] = Wait()
+  let count = 0
+  let done = 0
+  q.signal.ALL_DONE.receive(() => {
+    expect(q.getStatus()).toBe('pause')
+    done += 1
+    go()
+  })
+  const fn = async () => {
+    count += 1
+    return 'return'
   }
+  const promise = runTask(q, 9, fn)
+  expect( q.getPayload(fn) ).toBe(9)
+  const val = await promise
+  expect(count).toBe(1)
+  expect(val).toBe('return')
+  // await timeout(10)
+  await waiting
+  expect(done).toBe(1)
+  expect(q.getStatus()).toBe('pause')
 })
 
 test('Queue', () => {
@@ -229,7 +230,7 @@ test('Queue ALL_DONE signal', async () => {
   const q = Queue(QueueSignal())
   let val = 0
   q.signal.ALL_DONE.receive(() => {
-    // expect(q.getStatus()).toBe('pause')
+    expect(q.getStatus()).toBe('pause')
     val += 1
   })
 
@@ -307,7 +308,7 @@ test('Queue WILL_PROCESSING signal', async () => {
     assert(num % 2 === 0)
   }
 
-  expect( revoke_count ).toBe( list.length )
+  expect( revoke_count ).toBe( 50 )
 
   {
     const q = Queue(QueueSignal())

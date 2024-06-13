@@ -1,7 +1,11 @@
-import { Memo, MemoGetter, MemoSetter, ValidatingMemo } from './memo'
-import { Signal, removeByItem } from './signal'
+import { Memo, MemoGetter, MemoSetter } from './memo'
+import { concurrentEach } from './concurrent-each'
 import { OutterPromise } from './outter-promise'
+import { removeByItem } from './utils'
 import { nextTick } from './next-tick'
+import { Signal } from './signal'
+
+export class QueueError extends Error {}
 
 type TaskFunction<R> = () => Promise<R>
 type QueueTask = TaskFunction<void>
@@ -61,7 +65,7 @@ export function WithPayload<
     setPayload,
     getPayload(taskFunc: TaskFunction<unknown>): P {
       if (!payload_map.has(taskFunc)) {
-        throw new Error('getPayload failure: taskFunc not found')
+        throw new QueueError('getPayload failure: taskFunc not found')
       } else {
         return payload_map.get(taskFunc) as P
       }
@@ -92,12 +96,12 @@ export function Queue<S extends QueueSignal>(signal?: S): (
   [S] extends [void] ? Queue : QueueWithSignal
 )
 export function Queue<S extends void | QueueSignal>(signal?: S) {
-  const [getTasks, setTasks] = Memo<QueueTask[]>([])
+  const TasksMemo = Memo<QueueTask[]>([])
+  const [getTasks, setTasks] = TasksMemo
   const [getStatus, setStatus] = Memo<QueueStatus>('pause')
-  const [getMaxConcurrent, setMaxConcurrent] = ValidatingMemo<number>(
-    Memo(1),
-    validateMaxConcurrent,
-  )
+  const MaxConcurrentMemo = Memo(1)
+  Memo.addValidator(MaxConcurrentMemo, validateMaxConcurrent)
+  const [getMaxConcurrent, setMaxConcurrent] = MaxConcurrentMemo
 
   function dropTask(task: QueueTask) {
     setTasks(
@@ -108,50 +112,42 @@ export function Queue<S extends void | QueueSignal>(signal?: S) {
   async function run() {
     if (getStatus() === 'pause') {
       setStatus('running')
-      running()
+      startProcessing()
     }
   }
 
-  async function running() {
-    let current_concurrent = 0
-    await nextTick()
-
-    function after() {
-      if (getStatus() === 'running') {
-        if (
-          (getTasks().length === 0) &&
-          (current_concurrent === 1)
-        ) {
-          setStatus('pause')
-          signal?.ALL_DONE.trigger()
-        } else {
-          current_concurrent -= 1
-          callConcurrent()
-        }
+  type QueueTaskIterator = Generator<QueueTask, void, unknown>
+  function * QueueTaskIterator(): QueueTaskIterator {
+    while (getTasks().length !== 0) {
+      signal?.WILL_PROCESSING.trigger()
+      if (getTasks().length === 0) {
+        return
+      } else {
+        const [currentTask] = getTasks()
+        dropTask(currentTask)
+        yield currentTask
       }
     }
+  }
 
-    callConcurrent()
-    function callConcurrent() {
-      while (
-        (current_concurrent < getMaxConcurrent()) &&
-        (getTasks().length > 0)
-      ) {
-        signal?.WILL_PROCESSING.trigger()
-
-        if (getTasks().length === 0) {
-          after()
-        } else {
-          const [ taskFunc ] = getTasks()
-          dropTask( taskFunc )
-
-          current_concurrent += 1
-
-          taskFunc().then(after).catch(after)
-          signal?.PROCESSING.trigger(taskFunc)
-        }
-      }
-    }
+  function startProcessing() {
+    return (
+      nextTick().then(() => (
+        concurrentEach(
+          getMaxConcurrent(),
+          QueueTaskIterator(),
+          (task) => (
+            task().catch(() => {
+            }).then(() => {
+              signal?.PROCESSING.trigger(task)
+            })
+          )
+        )
+      )).then(() => {
+        setStatus('pause')
+        signal?.ALL_DONE.trigger()
+      })
+    )
   }
 
   function addTask(taskFunc: QueueTask) {
@@ -161,7 +157,7 @@ export function Queue<S extends void | QueueSignal>(signal?: S) {
     run()
   }
 
-  const queue = {
+  return {
     task: addTask,
     dropTask,
     getStatus,
@@ -169,8 +165,7 @@ export function Queue<S extends void | QueueSignal>(signal?: S) {
     setTasks,
     signal,
     setMaxConcurrent,
-  }
-  return queue as (
+  } as (
     [S] extends [void] ? Queue : QueueWithSignal
   )
 }
