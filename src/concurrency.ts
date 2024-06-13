@@ -1,39 +1,49 @@
 import { Memo, WithValidating } from './memo'
-import { Signal } from './signal'
 import { Wait } from './wait'
 
 const NONE_ERROR = Symbol('NONE_ERROR')
 
-export async function concurrency<T>(
-  init_max_concurrency: number,
-  iterator: IterableIterator<T>,
-  asyncFn: (item: T, idx: number) => Promise<void>,
-  changeMaxConcurrencySignal?: Signal<number>
-): Promise<void> {
-  const [ getMaxConcurrency, setMaxConcurrency ] = WithValidating(
-    Memo(init_max_concurrency),
-    v => {
-      if (v < 1) {
-        throw new RangeError('concurrent_limit should >= 1')
-      } else if (!Number.isInteger(v)) {
-        if (v !== Infinity) {
-          throw new TypeError('concurrent_limit should be integer')
-        }
+type ConcurrencyNumber = {
+  get(): number;
+  set(v: number): void
+  memo: Memo<number>
+}
+
+concurrency.Number = (v: number): ConcurrencyNumber => {
+  const memo = WithValidating(Memo(v), v => {
+    if (v < 1) {
+      throw new RangeError('concurrent_limit should >= 1')
+    } else if (!Number.isInteger(v)) {
+      if (v !== Infinity) {
+        throw new TypeError('concurrent_limit should be integer')
       }
     }
-  )
+  })
+
+  return {
+    get: Memo.getGetter(memo),
+    set: Memo.getSetter(memo),
+    memo,
+  }
+}
+
+export async function concurrency<T>(
+  MaxConcurrency: ConcurrencyNumber | number,
+  iterator: IterableIterator<T>,
+  asyncFn: (item: T, idx: number) => Promise<void>
+): Promise<void> {
+  if (typeof MaxConcurrency === 'number') {
+    return concurrency(concurrency.Number(MaxConcurrency), iterator, asyncFn)
+  }
+
+  const [ getMaxConcurrency ] = MaxConcurrency.memo
 
   let current_concurrency = 0
   let __idx = 0
   let error_info: (typeof NONE_ERROR) | Exclude<unknown, typeof NONE_ERROR> = NONE_ERROR
   const [ waiting, done ] = Wait()
   let result: IteratorResult<T, void>
-  const cancelWatch = changeMaxConcurrencySignal && (
-    changeMaxConcurrencySignal.receive((new_concurrent) => {
-      setMaxConcurrency(new_concurrent)
-      callConcurrent()
-    })
-  )
+  const cancelWatch = Memo.watch(MaxConcurrency.memo, callConcurrent)
 
   function after() {
     if (error_info === NONE_ERROR) {

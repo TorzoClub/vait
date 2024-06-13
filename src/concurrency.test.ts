@@ -174,12 +174,12 @@ test('concurrency should support Infinity max concurrency', async () => {
 
 test('concurrency should dynamically change the max concurrency', async () => {
   let revoke_count = 0
-  const changeSignal = Signal<number>()
+  const maxConcurrency = concurrency.Number(1)
   const resolved_idx_list: Array<number> = []
   const pedding_tasks: Array<Wait> = []
 
   const concurrentPromise = concurrency(
-    1,
+    maxConcurrency,
     range(0, 9)[Symbol.iterator](),
     (_, idx) => {
       revoke_count += 1
@@ -196,29 +196,28 @@ test('concurrency should dynamically change the max concurrency', async () => {
         })
       }
     },
-    changeSignal
   )
 
   await timeout(100)
   expect(revoke_count).toBe(1)
 
   expect(() => {
-    changeSignal.triggerCareError(-1)
+    maxConcurrency.set(-1)
   }).toThrow()
   expect(() => {
-    changeSignal.triggerCareError(0)
+    maxConcurrency.set(0)
   }).toThrow()
   expect(() => {
-    changeSignal.triggerCareError('' as any)
+    maxConcurrency.set('' as any)
   }).toThrow()
 
   expect(() => {
-    changeSignal.triggerCareError(1)
+    maxConcurrency.set(1)
   }).not.toThrow()
   await timeout(100)
   expect(revoke_count).toBe(1)
 
-  changeSignal.triggerCareError(2)
+  maxConcurrency.set(2)
   await timeout(100)
   expect(revoke_count).toBe(2)
 
@@ -247,13 +246,13 @@ test('concurrency should dynamically change the max concurrency', async () => {
 
 test('concurrency should dynamically change the max concurrency(change to small)', async () => {
   let revoke_count = 0
-  const changeSignal = Signal<number>()
   const resolved_idx_list: Array<number> = []
-  const pedding_tasks: Array<Wait> = []
   const waiting_list = range(0, 9).map(() => Wait())
 
+  const maxConcurrency = concurrency.Number(3)
+
   const concurrentPromise = concurrency(
-    3,
+    maxConcurrency,
     waiting_list[Symbol.iterator](),
     (w, idx) => {
       revoke_count += 1
@@ -262,7 +261,6 @@ test('concurrency should dynamically change the max concurrency(change to small)
         resolved_idx_list.push(idx)
       })
     },
-    changeSignal
   )
 
   expect(revoke_count).toBe(3)
@@ -270,7 +268,7 @@ test('concurrency should dynamically change the max concurrency(change to small)
   await timeout(100)
   expect(resolved_idx_list.length).toBe(0)
 
-  changeSignal.triggerCareError(1)
+  maxConcurrency.set(1)
   expect(revoke_count).toBe(3)
   expect(resolved_idx_list.length).toBe(0)
 
