@@ -1,4 +1,4 @@
-import { concurrentEach } from './concurrent-each'
+import { concurrency } from './concurrency'
 
 export function concurrentMap<T, NT>(
   __CONCURRENT_LIMIT: number,
@@ -10,7 +10,7 @@ export function concurrentMap<T, NT>(
   } else {
     const new_list: NT[] = []
     return (
-      concurrentEach(
+      concurrency(
         __CONCURRENT_LIMIT,
         list[Symbol.iterator](),
         async (item, idx) => {

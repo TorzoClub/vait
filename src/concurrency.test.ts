@@ -1,27 +1,27 @@
 import assert from 'assert'
-import { concurrentEach } from './concurrent-each'
 import { timeout } from './timeout'
 import { Wait } from './wait'
 import { nextTick } from './next-tick'
 import { Signal } from './signal'
 import { Timer } from './timer'
+import { concurrency } from './concurrency'
 
-test('concurrentEach(empty list)', async () => {
+test('concurrency(empty list)', async () => {
   let val = 0
   expect(
-    await concurrentEach(10, [][Symbol.iterator](), async () => {
+    await concurrency(10, [][Symbol.iterator](), async () => {
       val = 99
     })
   ).toBe(undefined)
   expect( val ).toBe( 0 )
 })
 
-test('concurrentEach(error handling)', async () => {
+test('concurrency(error handling)', async () => {
   let has_err = false
   const concurrent = 4
   let c = 0
   try {
-    await concurrentEach(concurrent, [1, 2, 3, 4, 5][Symbol.iterator](), async (_, idx) => {
+    await concurrency(concurrent, [1, 2, 3, 4, 5][Symbol.iterator](), async (_, idx) => {
       expect(idx).not.toBe(4)
       if (idx === 0) {
         throw new Error('failure_1')
@@ -60,7 +60,7 @@ test('在错误发生后尽可能地阻止并发执行', async () => {
   })
 
   expect(() => (
-    concurrentEach(3, range(0, 5)[Symbol.iterator](), async (_, idx) => {
+    concurrency(3, range(0, 5)[Symbol.iterator](), async (_, idx) => {
       revoke_count += 1
       if (idx === 1) {
         await timeout(50)
@@ -78,11 +78,11 @@ test('在错误发生后尽可能地阻止并发执行', async () => {
   expect(timertimeout).toBe(1)
 })
 
-test('concurrentEach(multi error)', async () => {
+test('concurrency(multi error)', async () => {
   let has_err = false
   let c = 0
   try {
-    await concurrentEach(3, [1, 2, 3, 4, 5][Symbol.iterator](), async (_, idx) => {
+    await concurrency(3, [1, 2, 3, 4, 5][Symbol.iterator](), async (_, idx) => {
       if (idx === 0) {
         await timeout(100)
         throw new Error('failure_1')
@@ -107,7 +107,7 @@ test('concurrent_limit should be integer', async () => {
   {
     let val = 0
     try {
-      await concurrentEach(1.1, [][Symbol.iterator](), () => Promise.resolve())
+      await concurrency(1.1, [][Symbol.iterator](), () => Promise.resolve())
       val = 111
     } catch (err) {
       assert( err instanceof TypeError )
@@ -121,7 +121,7 @@ test('concurrent_limit should >= 1', async () => {
   {
     let val = 0
     try {
-      await concurrentEach(0, [][Symbol.iterator](), () => Promise.resolve())
+      await concurrency(0, [][Symbol.iterator](), () => Promise.resolve())
       val = 111
     } catch (err) {
       assert( err instanceof RangeError )
@@ -132,7 +132,7 @@ test('concurrent_limit should >= 1', async () => {
   {
     let val = 0
     try {
-      await concurrentEach(0, [2,4,2,1,'a'][Symbol.iterator](), () => Promise.resolve())
+      await concurrency(0, [2,4,2,1,'a'][Symbol.iterator](), () => Promise.resolve())
       val = 111
     } catch (err) {
       assert( err instanceof RangeError )
@@ -150,17 +150,17 @@ function range(start: number, end: number) {
   return list
 }
 
-test('concurrentEach should support Infinity max concurrency', async () => {
+test('concurrency should support Infinity max concurrency', async () => {
   let revoke_count = 0
   const [waiting, ok] = Wait()
-  const promise = concurrentEach(Infinity, range(0, 9)[Symbol.iterator](), () => {
+  const promise = concurrency(Infinity, range(0, 9)[Symbol.iterator](), () => {
     revoke_count += 1
     return waiting
   })
   expect(revoke_count).toBe(10)
 
   expect(() => (
-    concurrentEach(-Infinity, range(0, 9)[Symbol.iterator](), () => {
+    concurrency(-Infinity, range(0, 9)[Symbol.iterator](), () => {
       revoke_count += 1
       return waiting
     })
@@ -172,13 +172,13 @@ test('concurrentEach should support Infinity max concurrency', async () => {
   await promise
 })
 
-test('concurrentEach should dynamically change the max concurrency', async () => {
+test('concurrency should dynamically change the max concurrency', async () => {
   let revoke_count = 0
   const changeSignal = Signal<number>()
   const resolved_idx_list: Array<number> = []
   const pedding_tasks: Array<Wait> = []
 
-  const concurrentPromise = concurrentEach(
+  const concurrentPromise = concurrency(
     1,
     range(0, 9)[Symbol.iterator](),
     (_, idx) => {
@@ -245,14 +245,14 @@ test('concurrentEach should dynamically change the max concurrency', async () =>
   expect(resolved_idx_list.slice(1, resolved_idx_list.length - 1)).toStrictEqual(range(2, 9)) // 中间的是 2～9
 })
 
-test('concurrentEach should dynamically change the max concurrency(change to small)', async () => {
+test('concurrency should dynamically change the max concurrency(change to small)', async () => {
   let revoke_count = 0
   const changeSignal = Signal<number>()
   const resolved_idx_list: Array<number> = []
   const pedding_tasks: Array<Wait> = []
   const waiting_list = range(0, 9).map(() => Wait())
 
-  const concurrentPromise = concurrentEach(
+  const concurrentPromise = concurrency(
     3,
     waiting_list[Symbol.iterator](),
     (w, idx) => {

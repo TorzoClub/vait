@@ -4,14 +4,14 @@ import { Wait } from './wait'
 
 const NONE_ERROR = Symbol('NONE_ERROR')
 
-export async function concurrentEach<T>(
-  init_max_concurrent: number,
+export async function concurrency<T>(
+  init_max_concurrency: number,
   iterator: IterableIterator<T>,
   asyncFn: (item: T, idx: number) => Promise<void>,
-  changeMaxConcurrentSignal?: Signal<number>
+  changeMaxConcurrencySignal?: Signal<number>
 ): Promise<void> {
-  const [ getMaxConcurrent, setMaxConcurrent ] = WithValidating(
-    Memo(init_max_concurrent),
+  const [ getMaxConcurrency, setMaxConcurrency ] = WithValidating(
+    Memo(init_max_concurrency),
     v => {
       if (v < 1) {
         throw new RangeError('concurrent_limit should >= 1')
@@ -23,24 +23,24 @@ export async function concurrentEach<T>(
     }
   )
 
-  let current_concurrent = 0
+  let current_concurrency = 0
   let __idx = 0
   let error_info: (typeof NONE_ERROR) | Exclude<unknown, typeof NONE_ERROR> = NONE_ERROR
   const [ waiting, done ] = Wait()
   let result: IteratorResult<T, void>
-  const cancelWatch = changeMaxConcurrentSignal && (
-    changeMaxConcurrentSignal.receive((new_concurrent) => {
-      setMaxConcurrent(new_concurrent)
+  const cancelWatch = changeMaxConcurrencySignal && (
+    changeMaxConcurrencySignal.receive((new_concurrent) => {
+      setMaxConcurrency(new_concurrent)
       callConcurrent()
     })
   )
 
   function after() {
     if (error_info === NONE_ERROR) {
-      current_concurrent -= 1
+      current_concurrency -= 1
       if (
         (result.done) &&
-        (current_concurrent === 0)
+        (current_concurrency === 0)
       ) {
         done()
       } else {
@@ -59,10 +59,10 @@ export async function concurrentEach<T>(
   callConcurrent()
   function callConcurrent() {
     while (
-      (current_concurrent < getMaxConcurrent()) &&
+      (current_concurrency < getMaxConcurrency()) &&
       (!result || !result?.done)
     ) {
-      current_concurrent += 1
+      current_concurrency += 1
 
       result = iterator.next()
       if (result.done) {

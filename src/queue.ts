@@ -1,9 +1,9 @@
 import { Memo, MemoGetter, MemoSetter } from './memo'
-import { concurrentEach } from './concurrent-each'
 import { OutterPromise } from './outter-promise'
 import { removeByItem } from './utils'
 import { nextTick } from './next-tick'
 import { Signal } from './signal'
+import { concurrency } from './concurrency'
 
 export class QueueError extends Error {}
 
@@ -133,7 +133,7 @@ export function Queue<S extends void | QueueSignal>(signal?: S) {
   function startProcessing() {
     return (
       nextTick().then(() => (
-        concurrentEach(
+        concurrency(
           getMaxConcurrent(),
           QueueTaskIterator(),
           (task) => (
