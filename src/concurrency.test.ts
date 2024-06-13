@@ -6,6 +6,30 @@ import { Signal } from './signal'
 import { Timer } from './timer'
 import { concurrency } from './concurrency'
 
+test('concurrency.Number', async () => {
+  const { get, set } = concurrency.Number(1)
+  assert(get() === 1)
+  set(99)
+  assert(get() === 99)
+})
+
+test('concurrency.each', async () => {
+  const idx_list: number[] = []
+  const arr = 'abcdefghijlmn'.split('')
+  const items: string[] = []
+  await concurrency.each(1, arr, async (item, idx, list) => {
+    expect(list).toBe(arr)
+    idx_list.push(idx)
+    items.push(item)
+  })
+
+  assert( idx_list.length === arr.length )
+  assert( (arr.length - 1) === Math.max(...idx_list) )
+  for (const idx of idx_list) {
+    assert( items[idx] === arr[idx] )
+  }
+})
+
 test('concurrency(empty list)', async () => {
   let val = 0
   expect(

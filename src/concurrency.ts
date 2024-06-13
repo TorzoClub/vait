@@ -3,7 +3,7 @@ import { Wait } from './wait'
 
 const NONE_ERROR = Symbol('NONE_ERROR')
 
-type ConcurrencyNumber = {
+export type ConcurrencyNumber = {
   get(): number;
   set(v: number): void
   memo: Memo<number>
@@ -26,6 +26,18 @@ concurrency.Number = (v: number): ConcurrencyNumber => {
     memo,
   }
 }
+
+concurrency.each = <T>(
+  MaxConcurrency: ConcurrencyNumber | number,
+  list: Array<T>,
+  asyncFn: (item: T, idx: number, list: T[]) => Promise<void>
+) => (
+  concurrency(
+    MaxConcurrency,
+    list[Symbol.iterator](),
+    (item, idx) => asyncFn(item, idx, list)
+  )
+)
 
 export async function concurrency<T>(
   MaxConcurrency: ConcurrencyNumber | number,
