@@ -1,4 +1,4 @@
-import { Wait } from './wait'
+import { Wait, WaitingRejected } from './wait'
 
 test('Wait', async () => {
   const [wait, go] = Wait()
@@ -61,4 +61,25 @@ test('Wait call go repeatedly', async () => {
 
   go(4)
   expect(await wait).toBe(1)
+})
+
+
+test('Wait error handling', async () => {
+  const [ waiting, , cancel ] = Wait()
+  cancel(new Error('aaaa'))
+  expect( waiting ).rejects.toThrow(WaitingRejected)
+
+  const cancel_error = new Error('cancelerror')
+  try {
+    const [waiting, , cancel] = Wait()
+    cancel(cancel_error)
+    await waiting
+  } catch (err: unknown) {
+    expect( err instanceof WaitingRejected ).toBe( true )
+    if (err instanceof WaitingRejected) {
+      expect( err.cause ).toBe( cancel_error )
+    } else {
+      throw err
+    }
+  }
 })

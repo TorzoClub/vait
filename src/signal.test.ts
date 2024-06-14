@@ -1,4 +1,4 @@
-import { Signal } from './signal'
+import { Signal, SignalError } from './signal'
 
 test('Signal', () => {
   const obj = Signal()
@@ -41,19 +41,24 @@ test('Signal trigger queue', () => {
   sig.trigger()
 })
 
+function ignoreConsoleWarn(fakeWarning: typeof console.warn) {
+  const beforeConsole = console
+  global.console = {
+    ...console,
+    warn: fakeWarning,
+  }
+  return () => global.console = beforeConsole
+}
+
 test('Signal trigger ignore error', () => {
   const sig = Signal<void>()
 
   let __val__ = 0
   let __is_call_console_warn__ = false
 
-  const beforeConsole = console
-  global.console = {
-    ...console,
-    warn() {
-      __is_call_console_warn__ = true
-    }
-  }
+  const restoreConsole = ignoreConsoleWarn(() => {
+    __is_call_console_warn__ = true
+  })
 
   sig.receive(() => {
     throw Error('failure')
@@ -67,7 +72,41 @@ test('Signal trigger ignore error', () => {
   expect(__val__).toBe(999)
   expect(__is_call_console_warn__).toBe(true)
 
-  global.console = beforeConsole
+  restoreConsole()
+})
+
+test('Signal.triggerCareError() should throw error', () => {
+  const sig = Signal()
+  sig.receive(() => {
+    throw 233
+  })
+  expect(() => sig.triggerCareError()).toThrow(SignalError)
+
+  let catched = false
+  try {
+    sig.triggerCareError()
+  } catch (err: any) {
+    catched = true
+    expect(err.cause).toBe(233)
+  }
+  expect(catched).toBe(true)
+})
+
+test('Signal receive() return value', () => {
+  const sig = Signal()
+
+  let __val__ = 0
+  const handler = () => {
+    __val__ = 999
+  }
+  const cancel = sig.receive(handler)
+  sig.trigger()
+  expect(__val__).toBe(999)
+
+  cancel()
+  __val__ = 0
+  sig.trigger()
+  expect(__val__).toBe(0)
 })
 
 test('Signal cancelReceive()', () => {
@@ -78,9 +117,12 @@ test('Signal cancelReceive()', () => {
     __val__ = 999
   }
   sig.receive(handler)
-  sig.cancelReceive(handler)
   sig.trigger()
+  expect(__val__).toBe(999)
 
+  sig.cancelReceive(handler)
+  __val__ = 0
+  sig.trigger()
   expect(__val__).toBe(0)
 })
 
@@ -131,4 +173,77 @@ test('Signal isEmpty()', () => {
 
   sig.receive(() => {})
   expect(sig.isEmpty()).toBe(false)
+})
+
+test('Signal a large quantity handlers', () => {
+  const sig = Signal()
+  let l = -100
+  let c = 0
+  const HANDLER_NUMBER = 10_000
+  for (let i = 0; i < HANDLER_NUMBER; ++i) {
+    sig.receive(() => {
+      c += 1
+      l = i
+    })
+  }
+  sig.trigger()
+  expect(l).toBe(HANDLER_NUMBER - 1)
+  expect(c).toBe(HANDLER_NUMBER)
+})
+
+jest.setTimeout(30000)
+test('Signal a large quantity error handlers', async () => {
+  const restoreConsole = ignoreConsoleWarn(() => {})
+
+  const sig = Signal()
+  let l = -100
+  let c = 0
+  const HANDLER_NUMBER = 10_000
+  for (let i = 0; i < HANDLER_NUMBER; ++i) {
+    sig.receive(() => {
+      c += 1
+      l = i
+      throw new Error('test')
+    })
+  }
+
+  const waiting = Signal.wait(sig)
+
+  sig.trigger()
+
+  await waiting
+  restoreConsole()
+
+  expect(l).toBe(HANDLER_NUMBER - 1)
+  expect(c).toBe(HANDLER_NUMBER)
+})
+
+test('Signal.once', async () => {
+  const sig = Signal<9>()
+  let call_count = 0
+  Signal.once(sig, (p) => {
+    call_count += 1
+    expect(p).toBe(9)
+  })
+  sig.trigger(9)
+  expect(call_count).toBe( 1 )
+  sig.trigger(9)
+  expect(call_count).toBe( 1 )
+  sig.trigger(9)
+  expect(call_count).toBe( 1 )
+})
+
+test('Signal.wait', async () => {
+  {
+    const sig = Signal()
+    const p = Signal.wait(sig)
+    sig.trigger()
+    await p
+  }
+  {
+    const sig = Signal<1>()
+    const p = Signal.wait(sig)
+    sig.trigger( 1 )
+    expect( await p ).toBe( 1 )
+  }
 })

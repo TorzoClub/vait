@@ -1,5 +1,3 @@
-import { timeout } from './timeout'
-
 export function nextTick() {
-  return timeout(0)
+  return Promise.resolve()
 }
