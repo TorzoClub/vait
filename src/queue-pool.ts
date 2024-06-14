@@ -1,7 +1,6 @@
 import { Queue, QueueSignal, QueueWithPayload, QueueWithSignal, WithPayload } from './queue'
 import { Signal } from './signal'
 import { Memo } from './memo'
-import { Sequence } from './sequence'
 import { Wait } from './wait'
 
 export type QueuePool<ID, Payload> = {

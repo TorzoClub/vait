@@ -75,14 +75,6 @@ export function WithPayload<
   }
 }
 
-function validateMaxConcurrent(v: number) {
-  if (!Number.isInteger(v)) {
-    return 'Max Concurrent should be Integer'
-  } else if (v < 1) {
-    return 'Max Concurrent should >= 1'
-  }
-}
-
 export function QueueSignal(): QueueSignal {
   const signal = {
     WILL_PROCESS: Signal(),
@@ -94,7 +86,6 @@ export function QueueSignal(): QueueSignal {
   return signal
 }
 
-
 export function Queue(): Queue
 export function Queue<S extends QueueSignal>(signal?: S): (
   [S] extends [void] ? Queue : QueueWithSignal
@@ -103,9 +94,8 @@ export function Queue<S extends void | QueueSignal>(signal?: S) {
   const TasksMemo = Memo<QueueTask[]>([])
   const [getTasks, setTasks] = TasksMemo
   const [getStatus, setStatus] = Memo<QueueStatus>('pause')
-  const MaxConcurrentMemo = Memo(1)
-  Memo.addValidator(MaxConcurrentMemo, validateMaxConcurrent)
-  const [getMaxConcurrent, setMaxConcurrent] = MaxConcurrentMemo
+  const MaxConcurrency = concurrency.Number(1)
+  const { memo: [, setMaxConcurrent] } = MaxConcurrency
 
   function dropTask(task: QueueTask) {
     setTasks(
@@ -138,18 +128,27 @@ export function Queue<S extends void | QueueSignal>(signal?: S) {
     return (
       nextTick().then(() => (
         concurrency(
-          getMaxConcurrent(),
+          MaxConcurrency,
           QueueTaskIterator(),
           (task) => (
             task()
-              .then(() => signal?.SUCCESS.trigger(task))
-              .catch((error) => signal?.ERROR.trigger({ task, error }))
-              .then(() => signal?.PROCESSED.trigger(task))
+              .then(() => {
+                signal?.SUCCESS.trigger(task)
+                signal?.PROCESSED.trigger(task)
+              })
+              .catch((error) => {
+                signal?.ERROR.trigger({ task, error })
+                signal?.PROCESSED.trigger(task)
+              })
           )
         )
       )).then(() => {
-        setStatus('pause')
-        signal?.ALL_DONE.trigger()
+        if (getTasks().length) {
+          startProcessing()
+        } else {
+          setStatus('pause')
+          signal?.ALL_DONE.trigger()
+        }
       })
     )
   }

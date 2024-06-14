@@ -4,8 +4,10 @@ import { timeout } from './timeout'
 import { Wait } from './wait'
 import { Memo } from './memo'
 import { Signal } from './signal'
+import { concurrency } from './concurrency'
+import { nextTick } from './next-tick'
 
-jest.setTimeout(15000)
+jest.setTimeout(7500)
 
 test('runTask (Queue', async () => {
   const q = Queue()
@@ -81,6 +83,31 @@ test('runTask (WithPayload(QueueSignal', async () => {
   await waiting
   expect(done).toBe(1)
   expect(q.getStatus()).toBe('pause')
+})
+
+test('runTask 连续 await', async () => {
+  const q = Queue(QueueSignal())
+  q.setMaxConcurrent(10)
+  const list: number[] = []
+  for (let i = 0; i < 50; ++i) {
+    list.push(
+      await runTask(q, async () => {
+        return timeout(0).then(() => i)
+      })
+    )
+  }
+
+  for (let i = 0; i < list.length; ++i) {
+    expect( list[i] ).toBe( i )
+  }
+
+  await runTask(q, async () => {
+    return timeout(100).then(() => 'hello')
+  })
+
+  await runTask(q, async () => {
+    return timeout(100).then(() => 'hello')
+  })
 })
 
 test('Queue', () => {
