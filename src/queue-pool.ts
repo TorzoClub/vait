@@ -29,7 +29,7 @@ export function QueuePool<ID, Payload>(): QueuePool<ID, Payload> {
 
   const signal = {
     ALL_DONE: Signal(),
-    ERROR: Signal<{ id: ID, payload: Payload, error: unknown }>()
+    ERROR: Signal<{ id: ID, payload: Payload, error: unknown }>(),
   }
 
   function createQueue(id: ID) {
@@ -59,13 +59,6 @@ export function QueuePool<ID, Payload>(): QueuePool<ID, Payload> {
     if (typeof func !== 'function') {
       return addTask(id, undefined as Payload, payload as (() => Promise<void>))
     } else {
-      // const pause = getPause()
-      // if (pause !== null) {
-      //   const [waiting] = pause
-      //   waiting.then(() => {
-      //     addTask(id, payload as Payload, func)
-      //   })
-      // }
       const q = getQueue(id)
       q.task(payload as Payload, func)
 

@@ -5,3 +5,4 @@ dist
 types
 *.test.ts
 *.test.js
+.yarn/install-state.gz

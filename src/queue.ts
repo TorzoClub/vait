@@ -130,17 +130,16 @@ export function Queue<S extends void | QueueSignal>(signal?: S) {
         concurrency(
           MaxConcurrency,
           QueueTaskIterator(),
-          (task) => (
-            task()
-              .then(() => {
-                signal?.SUCCESS.trigger(task)
-                signal?.PROCESSED.trigger(task)
-              })
-              .catch((error) => {
-                signal?.ERROR.trigger({ task, error })
-                signal?.PROCESSED.trigger(task)
-              })
-          )
+          async task => {
+            try {
+              await task()
+              signal?.SUCCESS.trigger(task)
+            } catch (error) {
+              signal?.ERROR.trigger({ task, error })
+            } finally {
+              signal?.PROCESSED.trigger(task)
+            }
+          }
         )
       )).then(() => {
         if (getTasks().length) {
