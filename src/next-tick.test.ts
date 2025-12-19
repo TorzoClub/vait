@@ -1,6 +1,6 @@
 import { nextTick } from './next-tick'
 
-test.only('nextTick', async () => {
+test('nextTick', async () => {
   let value: number | undefined = undefined
 
   const promise = nextTick().then(() => {

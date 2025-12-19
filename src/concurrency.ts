@@ -1,18 +1,19 @@
 import { Memo, WithValidating } from './memo'
+import { nextTick } from './next-tick';
 import { Wait } from './wait'
 
 const NONE_ERROR = Symbol('NONE_ERROR')
 
-export type ConcurrencyNumber = {
+export type ConcurrencyValve = {
   get(): number;
   set(v: number): void
   memo: Memo<number>
 }
 
-concurrency.Number = (v: number): ConcurrencyNumber => {
+concurrency.Valve = (v: number): ConcurrencyValve => {
   const memo = WithValidating(Memo(v), v => {
-    if (v < 1) {
-      throw new RangeError('concurrent_limit should >= 1')
+    if (v < 0) {
+      throw new RangeError('concurrent_limit should >= 0')
     } else if (!Number.isInteger(v)) {
       if (v !== Infinity) {
         throw new TypeError('concurrent_limit should be integer')
@@ -28,34 +29,42 @@ concurrency.Number = (v: number): ConcurrencyNumber => {
 }
 
 concurrency.each = <T>(
-  MaxConcurrency: ConcurrencyNumber | number,
+  valve: ConcurrencyValve | number,
   list: Array<T>,
   asyncFn: (item: T, idx: number, list: T[]) => Promise<void>
 ) => (
   concurrency(
-    MaxConcurrency,
+    valve,
     list[Symbol.iterator](),
     (item, idx) => asyncFn(item, idx, list)
   )
 )
 
 export async function concurrency<T>(
-  MaxConcurrency: ConcurrencyNumber | number,
+  valOrNum: ConcurrencyValve | number,
   iterator: IterableIterator<T>,
   asyncFn: (item: T, idx: number) => Promise<void>
 ): Promise<void> {
-  if (typeof MaxConcurrency === 'number') {
-    return concurrency(concurrency.Number(MaxConcurrency), iterator, asyncFn)
+  if (typeof valOrNum === 'number') {
+    return concurrencyWithValve(concurrency.Valve(valOrNum), iterator, asyncFn)
+  } else {
+    return concurrencyWithValve(valOrNum, iterator, asyncFn)
   }
+}
 
-  const [ getMaxConcurrency ] = MaxConcurrency.memo
-
+function concurrencyWithValve<T>(
+  valve: ConcurrencyValve,
+  iterator: IterableIterator<T>,
+  asyncFn: (item: T, idx: number) => Promise<void>
+): Promise<void> {
   let current_concurrency = 0
   let __idx = 0
   let error_info: (typeof NONE_ERROR) | Exclude<unknown, typeof NONE_ERROR> = NONE_ERROR
   const [ waiting, done ] = Wait()
   let result: IteratorResult<T, void>
-  const cancelWatch = Memo.watch(MaxConcurrency.memo, callConcurrent)
+  const cancelWatch = Memo.watch(valve.memo, () => {
+    nextTick().then(run)
+  })
 
   function after() {
     if (error_info === NONE_ERROR) {
@@ -66,7 +75,7 @@ export async function concurrency<T>(
       ) {
         done()
       } else {
-        callConcurrent()
+        run()
       }
     }
   }
@@ -78,10 +87,10 @@ export async function concurrency<T>(
     }
   }
 
-  callConcurrent()
-  function callConcurrent() {
+  run()
+  function run() {
     while (
-      (current_concurrency < getMaxConcurrency()) &&
+      (current_concurrency < valve.get()) &&
       (!result || !result?.done)
     ) {
       current_concurrency += 1
@@ -103,7 +112,7 @@ export async function concurrency<T>(
 
   return (
     waiting.then(() => {
-      cancelWatch && cancelWatch()
+      cancelWatch()
       if (error_info !== NONE_ERROR) {
         throw error_info
       }

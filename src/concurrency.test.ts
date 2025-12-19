@@ -5,9 +5,10 @@ import { nextTick } from './next-tick'
 import { Signal } from './signal'
 import { Timer } from './timer'
 import { concurrency } from './concurrency'
+import { Memo } from './memo'
 
-test('concurrency.Number', async () => {
-  const { get, set } = concurrency.Number(1)
+test('concurrency.Valve', async () => {
+  const { get, set } = concurrency.Valve(1)
   assert(get() === 1)
   set(99)
   assert(get() === 99)
@@ -141,11 +142,11 @@ test('concurrent_limit should be integer', async () => {
   }
 })
 
-test('concurrent_limit should >= 1', async () => {
+test('concurrent_limit should >= 0', async () => {
   {
     let val = 0
     try {
-      await concurrency(0, [][Symbol.iterator](), () => Promise.resolve())
+      await concurrency(-1, [][Symbol.iterator](), () => Promise.resolve())
       val = 111
     } catch (err) {
       assert( err instanceof RangeError )
@@ -156,7 +157,7 @@ test('concurrent_limit should >= 1', async () => {
   {
     let val = 0
     try {
-      await concurrency(0, [2,4,2,1,'a'][Symbol.iterator](), () => Promise.resolve())
+      await concurrency(-9, [2,4,2,1,'a'][Symbol.iterator](), () => Promise.resolve())
       val = 111
     } catch (err) {
       assert( err instanceof RangeError )
@@ -174,7 +175,7 @@ function range(start: number, end: number) {
   return list
 }
 
-test('concurrency should support Infinity max concurrency', async () => {
+test('concurrency() should support Infinity max concurrency', async () => {
   let revoke_count = 0
   const [waiting, ok] = Wait()
   const promise = concurrency(Infinity, range(0, 9)[Symbol.iterator](), () => {
@@ -196,14 +197,14 @@ test('concurrency should support Infinity max concurrency', async () => {
   await promise
 })
 
-test('concurrency should dynamically change the max concurrency', async () => {
+test('concurrency() should dynamically change the max concurrency', async () => {
   let revoke_count = 0
-  const maxConcurrency = concurrency.Number(1)
+  const concurrencyValve = concurrency.Valve(1)
   const resolved_idx_list: Array<number> = []
   const pedding_tasks: Array<Wait> = []
 
   const concurrentPromise = concurrency(
-    maxConcurrency,
+    concurrencyValve,
     range(0, 9)[Symbol.iterator](),
     (_, idx) => {
       revoke_count += 1
@@ -226,22 +227,28 @@ test('concurrency should dynamically change the max concurrency', async () => {
   expect(revoke_count).toBe(1)
 
   expect(() => {
-    maxConcurrency.set(-1)
+    concurrencyValve.set(-1)
   }).toThrow()
   expect(() => {
-    maxConcurrency.set(0)
+    concurrencyValve.set(-2)
   }).toThrow()
   expect(() => {
-    maxConcurrency.set('' as any)
+    concurrencyValve.set(-10)
+  }).toThrow()
+  // expect(() => {
+  //   concurrencyValve.set(0)
+  // }).toThrow()
+  expect(() => {
+    concurrencyValve.set('' as any)
   }).toThrow()
 
   expect(() => {
-    maxConcurrency.set(1)
+    concurrencyValve.set(1)
   }).not.toThrow()
   await timeout(100)
   expect(revoke_count).toBe(1)
 
-  maxConcurrency.set(2)
+  concurrencyValve.set(2)
   await timeout(100)
   expect(revoke_count).toBe(2)
 
@@ -268,15 +275,15 @@ test('concurrency should dynamically change the max concurrency', async () => {
   expect(resolved_idx_list.slice(1, resolved_idx_list.length - 1)).toStrictEqual(range(2, 9)) // 中间的是 2～9
 })
 
-test('concurrency should dynamically change the max concurrency(change to small)', async () => {
+test('concurrency() should dynamically change the max concurrency(change to small)', async () => {
   let revoke_count = 0
   const resolved_idx_list: Array<number> = []
   const waiting_list = range(0, 9).map(() => Wait())
 
-  const maxConcurrency = concurrency.Number(3)
+  const concurrencyValve = concurrency.Valve(3)
 
   const concurrentPromise = concurrency(
-    maxConcurrency,
+    concurrencyValve,
     waiting_list[Symbol.iterator](),
     (w, idx) => {
       revoke_count += 1
@@ -292,7 +299,7 @@ test('concurrency should dynamically change the max concurrency(change to small)
   await timeout(100)
   expect(resolved_idx_list.length).toBe(0)
 
-  maxConcurrency.set(1)
+  concurrencyValve.set(1)
   expect(revoke_count).toBe(3)
   expect(resolved_idx_list.length).toBe(0)
 
@@ -333,4 +340,92 @@ test('concurrency should dynamically change the max concurrency(change to small)
   }
 
   await concurrentPromise
+})
+
+test('concurrency() should support 0 max concurrency', async () => {
+  let revoke_count = 0
+  const concurrencyValve = concurrency.Valve(0)
+  const concurrentPromise = concurrency(
+    concurrencyValve,
+    range(0, 9)[Symbol.iterator](),
+    async (_, idx) => {
+      revoke_count += 1
+    },
+  )
+
+  await timeout(100)
+  expect(revoke_count).toBe(0)
+  concurrencyValve.set(1)
+
+  await timeout(100)
+  expect(revoke_count).toBe(10)
+  await concurrentPromise
+})
+
+test('concurrency() should support pause', async () => {
+  let revoke_count = 0
+  const resolved_idx_list: Array<number> = []
+  const waiting_list = range(0, 9).map(() => Wait())
+
+  const concurrencyValve = concurrency.Valve(3)
+
+  const concurrentPromise = concurrency(
+    concurrencyValve,
+    waiting_list[Symbol.iterator](),
+    (w, idx) => {
+      revoke_count += 1
+      const [ waiting ] = w
+      return waiting.then(() => {
+        resolved_idx_list.push(idx)
+      })
+    },
+  )
+
+  expect(revoke_count).toBe(3)
+
+  concurrencyValve.set(0)
+  waiting_list.slice(0, 3).forEach(([, go]) => go())
+  await timeout(100)
+  expect(revoke_count).toBe(3)
+
+  waiting_list.forEach(([, go]) => go())
+  concurrencyValve.set(1)
+
+  await concurrentPromise
+})
+
+test('concurrency() should set valve in async function', async () => {
+  let revoke_count = 0
+  const resolved_idx_list: Array<number> = []
+  const concurrencyValve = concurrency.Valve(1)
+
+  // const m = Memo(2)
+  // const cancel = Memo.watch(m, () => {
+  //   cancel()
+  //   Memo.change(m, 9)
+  // })
+  // Memo.change(m, 1)
+
+  const concurrentPromise = concurrency(
+    concurrencyValve,
+    range(0, 9)[Symbol.iterator](),
+    async (_, idx) => {
+      revoke_count += 1
+      concurrencyValve.set(0)
+      Timer(
+        Math.floor(Math.random() * 100),
+        () => {
+          concurrencyValve.set(1)
+          resolved_idx_list.push(idx)
+        }
+      )
+    },
+  )
+
+  await concurrentPromise
+
+  expect(revoke_count).toBe(10)
+  for (let i = 0; i < resolved_idx_list.length; ++i) {
+    expect(resolved_idx_list[i]).toBe(i)
+  }
 })

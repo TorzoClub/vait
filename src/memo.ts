@@ -27,8 +27,6 @@ type MemoAfter<D> = TypedFunc<'after', D, void>
 export type MemoLike<D> = [ MemoGetter<D>, MemoSetter<D>, ...Array<MemoBefore<D> | MemoAfter<D>> ]
 export type Memo<D> = ID<MemoLike<D>, 'memo'>
 
-// type TypeMemo = [ MemoGetter<D> ]
-
 export class MemoError extends Error { }
 
 export const Memo = <D>(data: D): Memo<D> => {

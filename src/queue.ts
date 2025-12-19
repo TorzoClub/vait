@@ -94,8 +94,8 @@ export function Queue<S extends void | QueueSignal>(signal?: S) {
   const TasksMemo = Memo<QueueTask[]>([])
   const [getTasks, setTasks] = TasksMemo
   const [getStatus, setStatus] = Memo<QueueStatus>('pause')
-  const MaxConcurrency = concurrency.Number(1)
-  const { memo: [, setMaxConcurrent] } = MaxConcurrency
+  const concurrencyValve = concurrency.Valve(1)
+  const { memo: [, setMaxConcurrent] } = concurrencyValve
 
   function dropTask(task: QueueTask) {
     setTasks(
@@ -128,19 +128,18 @@ export function Queue<S extends void | QueueSignal>(signal?: S) {
     return (
       nextTick().then(() => (
         concurrency(
-          MaxConcurrency,
+          concurrencyValve,
           QueueTaskIterator(),
-          (task) => (
-            task()
-              .then(() => {
-                signal?.SUCCESS.trigger(task)
-                signal?.PROCESSED.trigger(task)
-              })
-              .catch((error) => {
-                signal?.ERROR.trigger({ task, error })
-                signal?.PROCESSED.trigger(task)
-              })
-          )
+          async task => {
+            try {
+              await task()
+              signal?.SUCCESS.trigger(task)
+            } catch (error) {
+              signal?.ERROR.trigger({ task, error })
+            } finally {
+              signal?.PROCESSED.trigger(task)
+            }
+          }
         )
       )).then(() => {
         if (getTasks().length) {
