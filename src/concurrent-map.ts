@@ -1,7 +1,7 @@
-import { ConcurrencyNumber, concurrency } from './concurrency'
+import { ConcurrencyValve, concurrency } from './concurrency'
 
 export function concurrentMap<T, NT>(
-  conccurrencyNumber: ConcurrencyNumber | number,
+  valve: ConcurrencyValve | number,
   list: T[],
   asyncFn: (item: T, idx: number, total: T[]) => Promise<NT>,
 ): Promise<NT[]> {
@@ -10,7 +10,7 @@ export function concurrentMap<T, NT>(
   } else {
     const new_list: NT[] = []
     return concurrency.each(
-      conccurrencyNumber,
+      valve,
       list,
       async (item, idx) => {
         new_list[idx] = await asyncFn(item, idx, list)

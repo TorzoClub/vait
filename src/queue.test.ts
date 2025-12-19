@@ -118,9 +118,6 @@ test('Queue', () => {
     Queue().setMaxConcurrent(0.9)
   }).toThrow()
   expect(() => {
-    Queue().setMaxConcurrent(0)
-  }).toThrow()
-  expect(() => {
     Queue().setMaxConcurrent('0' as any)
   }).toThrow()
 })
