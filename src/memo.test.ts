@@ -425,3 +425,22 @@ test('watching ValidatingMemo By WatchMemo(ValidatingMemo(Memo', () => {
   set(999)
   expect(changed).toBe( 2 )
 })
+
+test.only('memo should support cancel in watch handle', () => {
+  const m = Memo(2)
+  let i: number = 0
+  const watchHandler = () => {
+    cancel()
+    i += 1
+  }
+  const cancel = Memo.watch(m, watchHandler)
+
+  expect(i).toBe(0)
+  Memo.change(m, 1)
+  expect(i).toBe(1)
+
+  assert(m.length === 2)
+
+  Memo.change(m, 2)
+  expect(i).toBe(1)
+})
