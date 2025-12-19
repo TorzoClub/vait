@@ -9,9 +9,10 @@
     "test-watch": "jest ./src/ --watchAll",
     "build:type": "rm -rf types/* && tsc -p ./tsconfig.type.json",
     "build:rollup": "rollup -c rollup.config.js",
-    "build": "yarn build:type && yarn build:rollup",
-    "lint": "yarn eslint ./src/ --ext .js,.jsx,.ts,.tsx",
-    "lint-strict": "yarn lint --max-warnings 0"
+    "build": "npm run build:type && npm run build:rollup",
+    "runtsc": "tsc --noEmit",
+    "lint": "eslint ./src/ --ext .js,.jsx,.ts,.tsx",
+    "lint-strict": "npm run lint -- --max-warnings 0"
   },
   "files": [
     "dist",
