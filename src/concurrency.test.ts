@@ -229,6 +229,12 @@ test('concurrency() should dynamically change the max concurrency', async () => 
   expect(() => {
     concurrencyValve.set(-1)
   }).toThrow()
+  expect(() => {
+    concurrencyValve.set(-2)
+  }).toThrow()
+  expect(() => {
+    concurrencyValve.set(-10)
+  }).toThrow()
   // expect(() => {
   //   concurrencyValve.set(0)
   // }).toThrow()
@@ -388,7 +394,7 @@ test('concurrency() should support pause', async () => {
   await concurrentPromise
 })
 
-test.only('concurrency() should set valve in async function', async () => {
+test('concurrency() should set valve in async function', async () => {
   let revoke_count = 0
   const resolved_idx_list: Array<number> = []
   const concurrencyValve = concurrency.Valve(1)
