@@ -166,8 +166,8 @@ console.log(result) // [2, 4, 6, 8, 10]
 
 ```bash
 npm test          # 运行 Vitest 测试（含覆盖率）
-npm run runtsc    # 类型检查
-npm run lint      # ESLint
+npm run runtsc    # 类型检查（TypeScript 7）
+npm run lint      # ESLint（当前仅检查 JS 文件）
 npm run build     # 生成 types/ 与 dist/
 ```
 

@@ -133,7 +133,7 @@ module.exports = {
 }
 ```
 
-> 当前 `.eslintrc` 是旧格式（ESLint 8），迁移时一并处理；变量强制 snake_case 会对存量代码产生大面积告警，建议在 v6 分支一次性格式化。
+> 当前使用 ESLint 10 的 flat config（`eslint.config.mjs`）；但 TypeScript 7 暂不被 typescript-eslint 支持，ESLint 目前只检查 JavaScript 文件。上面的 TypeScript 规则需要等 typescript-eslint 支持 TypeScript 7 后再落地；变量强制 snake_case 会对存量代码产生大面积告警，建议在 v6 分支一次性格式化。
 
 ## 2. 命名与导出重构
 

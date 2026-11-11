@@ -11,7 +11,7 @@
     "build:vite": "vite build",
     "build": "npm run build:type && npm run build:vite",
     "runtsc": "tsc --noEmit",
-    "lint": "eslint ./src/ --ext .js,.jsx,.ts,.tsx",
+    "lint": "eslint .",
     "lint-strict": "npm run lint -- --max-warnings 0"
   },
   "files": [
@@ -23,12 +23,11 @@
   "author": "vec <vec@torzo.club>",
   "license": "MIT",
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^22.20.5",
-    "@typescript-eslint/eslint-plugin": "^7.8.0",
-    "@typescript-eslint/parser": "^7.8.0",
     "@vitest/coverage-v8": "^5.1.0",
-    "eslint": "^8.57.0",
-    "typescript": "^5.4.5",
+    "eslint": "^10.14.0",
+    "typescript": "^7.0.2",
     "vite": "^8.3.8",
     "vitest": "^5.1.0"
   }
