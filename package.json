@@ -1,6 +1,6 @@
 {
   "name": "vait",
-  "version": "4.3.0",
+  "version": "5.0.0",
   "main": "./dist/vait.common.js",
   "module": "./dist/vait.esm.js",
   "typings": "./types/index.d.ts",

@@ -46,9 +46,7 @@ export type QueueWithPayload<P, Q extends (Queue | QueueWithSignal)> = Omit<Q, '
 
 export function WithPayload<P>(q: Queue): QueueWithPayload<P, Queue>
 export function WithPayload<P>(q: QueueWithSignal): QueueWithPayload<P, QueueWithSignal>
-export function WithPayload<
-  P
->(q: Queue | QueueWithSignal) {
+export function WithPayload<P>(q: Queue | QueueWithSignal) {
   const payload_map = new WeakMap<TaskFunction<unknown>, P>()
 
   function addTask(payload: P, taskFunc: QueueTask) {
@@ -76,14 +74,13 @@ export function WithPayload<
 }
 
 export function QueueSignal(): QueueSignal {
-  const signal = {
+  return {
     WILL_PROCESS: Signal(),
     SUCCESS: Signal<QueueTask>(),
     ERROR: Signal<{ task: QueueTask, error: unknown }>(),
     PROCESSED: Signal<QueueTask>(),
     ALL_DONE: Signal(),
   }
-  return signal
 }
 
 export function Queue(): Queue
