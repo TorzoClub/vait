@@ -165,7 +165,7 @@ console.log(result) // [2, 4, 6, 8, 10]
 ## 开发
 
 ```bash
-npm test          # 运行 Jest 测试
+npm test          # 运行 Vitest 测试（含覆盖率）
 npm run runtsc    # 类型检查
 npm run lint      # ESLint
 npm run build     # 生成 types/ 与 dist/

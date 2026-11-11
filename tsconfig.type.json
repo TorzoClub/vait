@@ -4,5 +4,13 @@
     "declaration": true,
     "declarationDir": "./types",
     "emitDeclarationOnly": true
-  }
+  },
+  "exclude": [
+    "**/node_modules",
+    "**/build",
+    "**/dist",
+    "**/*.md",
+    "vite.config.mts",
+    "**/*.test.ts"
+  ]
 }

@@ -67,7 +67,7 @@ test('Wait call go repeatedly', async () => {
 test('Wait error handling', async () => {
   const [ waiting, , cancel ] = Wait()
   cancel(new Error('aaaa'))
-  expect( waiting ).rejects.toThrow(WaitingRejected)
+  await expect( waiting ).rejects.toThrow(WaitingRejected)
 
   const cancel_error = new Error('cancelerror')
   try {
