@@ -7,8 +7,6 @@ import { Signal } from './signal'
 import { concurrency } from './concurrency'
 import { nextTick } from './next-tick'
 
-jest.setTimeout(7500)
-
 test('runTask (Queue', async () => {
   const q = Queue()
   let count = 0

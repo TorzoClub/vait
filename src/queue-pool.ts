@@ -35,6 +35,14 @@ export function QueuePool<ID, Payload>(): QueuePool<ID, Payload> {
   function createQueue(id: ID) {
     const q = WithPayload<Payload>(Queue(QueueSignal()))
     pool.set(id, q)
+    const pause = getPause()
+    if (pause) {
+      const [ waiting ] = pause
+      q.setTasks([
+        () => waiting,
+        ...q.getTasks(),
+      ])
+    }
   }
 
   function getQueue(id: ID): QueueWithPayload<Payload, QueueWithSignal> {

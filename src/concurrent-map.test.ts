@@ -1,6 +1,7 @@
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 // const assert = require('power-assert')
 
+import { vi } from 'vitest'
 import { concurrentMap } from './concurrent-map'
 import { nextTick } from './next-tick'
 import { timeout } from './timeout'
@@ -113,7 +114,7 @@ test('should stop processing on the first error', async () => {
   const items = [1, 2, 3, 4, 5]
   const errorMessage = 'Test error'
 
-  const asyncIterator = jest.fn(async (item, idx) => {
+  const asyncIterator = vi.fn(async (item, idx) => {
     if (item === 3) {
       throw new Error(errorMessage)
     }

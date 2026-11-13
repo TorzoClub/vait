@@ -191,7 +191,6 @@ test('Signal a large quantity handlers', () => {
   expect(c).toBe(HANDLER_NUMBER)
 })
 
-jest.setTimeout(30000)
 test('Signal a large quantity error handlers', async () => {
   const restoreConsole = ignoreConsoleWarn(() => {})
 
