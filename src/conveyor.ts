@@ -1,0 +1,490 @@
+import { Memo, WithValidating } from "./memo"
+import { OutterPromise } from "./outter-promise"
+import { Signal } from "./signal"
+import { ID, removeItem } from "./utils"
+
+type TaskID = ID<Symbol, 'TaskID'>
+
+export type AbortType = 'destroy' | 'outside' | 'timeout'
+
+type RetireResult =
+  | { scene: 'not found' }
+  | { scene: 'retired' }
+  | { scene: 'in processing' }
+
+type TaskStatus =
+  | 'in blacklogs'
+  | 'in processing'
+  | 'failure'
+  | 'done'
+  | 'retired in processing'
+  | 'retired'
+  | 'timeout in waiting'
+  | 'timeout in processing'
+  | 'destroyed'
+
+export type ConveyorSendResult<ReceiverReturn> =
+  | Readonly<{ type: 'done', return_value: ReceiverReturn }>
+  | Readonly<{ type: 'overflow' }>
+  | Readonly<{ type: 'receiver_failure', error: unknown }>
+  | Readonly<{ type: 'retired' }>
+  | Readonly<{ type: 'timeout in waiting', elapsed_time: number }>
+  | Readonly<{ type: 'timeout in processing', elapsed_time: number }>
+
+const __overflow_result: Readonly<{ type: 'overflow' }> = Object.freeze({ type: 'overflow' })
+
+type ConveyorErrorSource = 'Receiver' | 'Internal'
+
+export class ConveyorError extends Error {
+  source: ConveyorErrorSource
+  constructor(source: ConveyorErrorSource, msg: string, opts: { cause?: unknown }) {
+    super(msg, opts)
+    this.source = source
+  }
+}
+
+// Receiver 函数签名
+type Receiver<Payload, ReceiverReturn> = (
+  payload: Payload,
+  o: {
+    id: TaskID,
+    abort_signal: Signal<AbortType>,
+  }
+) => Promise<ReceiverReturn>
+
+type ConveyorSignals<Payload> = {
+  sig_receiver_failure: Signal<{ task_id: TaskID, error: unknown }>
+  sig_receiver_will_process: Signal<TaskID>
+  sig_receiver_processed: Signal<TaskID>
+  sig_send_before: Signal<Payload>
+  sig_receiver_done: Signal<TaskID>
+}
+
+const sym_hook_willProcess = Symbol('sym_hook_willProcess')
+
+type Task<Payload> = {
+  id: TaskID
+  payload: Payload
+
+  [sym_hook_willProcess]: () => void
+}
+
+export type ConveyorInstance<Payload, ReceiverReturn> = {
+  setValve(n: number): void
+  setBacklogsLimit(n: number): void
+  setWaitingTimeout(n: number): void
+  setProcessingTimeout(n: number): void
+
+  send(payload: Payload): Promise<ConveyorSendResult<ReceiverReturn>>
+
+  getBlacklogs(): Task<Payload>[]
+  getTaskStatus(id: TaskID): TaskStatus
+  retireOneIgnoreProcessing(id: Task<Payload>['id']): Exclude<RetireResult, { scene: 'in processing' }>
+  retireOne(id: Task<Payload>['id']): RetireResult
+
+  destroy(): void
+
+  signals: ConveyorSignals<Payload>
+}
+
+type Valve = {
+  get(): number;
+  set(v: number): void
+  memo: Memo<number>
+}
+
+const Valve = (v: number): Valve => {
+  const memo = WithValidating(Memo(v), v => {
+    if (!Number.isInteger(v)) {
+      throw new TypeError('concurrent_limit should be integer')
+    } else if (v < 0) {
+      throw new RangeError('concurrent_limit should >= 0')
+    }
+  })
+
+  return {
+    get: Memo.getGetter(memo),
+    set: Memo.getSetter(memo),
+    memo,
+  }
+}
+
+function allocTaskID(): TaskID {
+  return Symbol('Conveyor Task ID') as unknown as TaskID
+}
+
+function Guard(
+  failWhen: () => boolean
+) {
+  return (guardFn: () => never) =>
+    <A extends unknown[], T>(fn: (...args: A) => T) =>
+      (...args: A) => (
+        failWhen() ? guardFn() : fn(...args)
+      )
+}
+
+const conveyor_defaults = {
+  valve: 1,
+  blacklogs_limit: Infinity,
+  waiting_time: 0,
+  processing_time: 0,
+} as const
+
+const __promise_pool = new WeakMap<Promise<any>, TaskID>()
+function getTaskIDByPromise(p: Promise<any>) {
+  return __promise_pool.get(p)
+}
+function setTaskIDByPromise(promise: Promise<any>, task_id: TaskID) {
+  __promise_pool.set(promise, task_id)
+}
+Conveyor.getTaskIDByPromise = getTaskIDByPromise
+
+export function Conveyor<Payload, ReceiverReturn>(
+  receiver: Receiver<Payload, ReceiverReturn>
+): ConveyorInstance<Payload, ReceiverReturn> {
+  const destroyMemo = Memo(false)
+  const sig_destroyed = Signal()
+  Memo.watch(destroyMemo, d => {
+    if (d) { sig_destroyed.trigger() }
+  })
+  const [isDestroy, setDestroy] = destroyMemo as [ () => boolean, (b: true) => void ]
+  const WithDestroy = Guard(isDestroy)(() => {
+    throw new ConveyorError('Internal', 'This Conveyor is Destored', {})
+  })
+
+  const signals: ConveyorSignals<Payload> = {
+    sig_receiver_failure: Signal<{ task_id: TaskID, error: unknown }>(),
+    sig_receiver_will_process: Signal<TaskID>(),
+    sig_receiver_processed: Signal<TaskID>(),
+    sig_send_before: Signal<Payload>(),
+    sig_receiver_done: Signal<TaskID>(),
+  }
+
+  const waitingTimer = Timer(conveyor_defaults.waiting_time)
+  const processingTimer = Timer(conveyor_defaults.processing_time)
+
+  const valve = Valve(conveyor_defaults.valve)
+  const [getBlacklogsLimit, setBlacklogsLimit] = Memo(conveyor_defaults.blacklogs_limit)
+  const blacklogsMemo = Memo<Task<Payload>[]>([])
+  const [getBlacklogs, setBlacklogs] = blacklogsMemo
+
+  const task_done_pool = new WeakMap<TaskID, Signal<ConveyorSendResult<ReceiverReturn>>>()
+  function triggerDoneSignal(task_id: TaskID, result: ConveyorSendResult<ReceiverReturn>) {
+    weakMapItemIfExist(task_done_pool, task_id, done_signal => {
+      done_signal.trigger(result)
+    })
+  }
+
+  const task_status_pool = new WeakMap<TaskID, TaskStatus>()
+  function taskIsProcessing(task_id: TaskID) {
+    return 'in processing' === task_status_pool.get(task_id)
+  }
+  const setTaskStatus = task_status_pool.set.bind(task_status_pool)
+
+  const task_abort_pool = new WeakMap<TaskID, Signal<AbortType>>()
+  function getAbortSignal(task_id: TaskID) {
+    return getWeakMapItem(task_abort_pool, task_id, () => Signal<AbortType>())
+  }
+
+  const [getCurrentProcessing, setCurrentProcessing] = Memo(0)
+  function startProcessing() {
+    if (isDestroy()) { return }
+
+    const concurrency = valve.get()
+    const tasks = getBlacklogs()
+
+    if (tasks.length === 0) { return }
+
+    const has_available_slots = getCurrentProcessing() < concurrency
+
+    if (!has_available_slots) { return }
+
+    const can_start_count = Math.min(
+      concurrency - getCurrentProcessing(),
+      tasks.length
+    )
+
+    if (!(can_start_count > 0)) { return }
+
+    setCurrentProcessing(getCurrentProcessing() + can_start_count)
+
+    const will_process_tasks = tasks.slice(0, can_start_count)
+    setBlacklogs(tasks.slice(can_start_count))
+
+    for (const task of will_process_tasks) {
+      const abort_signal = getAbortSignal(task.id)
+
+
+      const cancelDestroyedWatcher = Signal.once(sig_destroyed, () => {
+        abort_signal.trigger('destroy')
+        setTaskStatus(task.id, 'destroyed')
+      })
+      setTaskStatus(task.id, 'in processing')
+
+      signals.sig_receiver_will_process.trigger(task.id)
+
+      task[sym_hook_willProcess]()
+
+      const promiseMiddle = receiver(task.payload, {
+        id: task.id,
+        abort_signal,
+      })
+
+      let $is_timeout = false
+      const cancelProcessingTimer = processingTimer.mount(promiseMiddle, function processingTimeout(elapsed_time) {
+        $is_timeout = true
+        cancelDestroyedWatcher()
+
+        abort_signal.trigger('timeout')
+
+        setCurrentProcessing(getCurrentProcessing() - 1)
+        setTaskStatus(task.id, 'timeout in processing')
+
+        triggerDoneSignal(task.id, { type: 'timeout in processing', elapsed_time })
+
+        startProcessing()
+      })
+
+      promiseMiddle.then(return_value => {
+        if ($is_timeout) { return }
+        if (task_status_pool.get(task.id) === 'in processing') {
+          setTaskStatus(task.id, 'done')
+        }
+        triggerDoneSignal(task.id, {
+          type: 'done',
+          return_value
+        })
+        signals.sig_receiver_done.trigger(task.id)
+      }).catch(error => {
+        if ($is_timeout) { return }
+        if (task_status_pool.get(task.id) === 'in processing') {
+          setTaskStatus(task.id, 'failure')
+        }
+        triggerDoneSignal(task.id, {
+          type: 'receiver_failure',
+          error
+        })
+        signals.sig_receiver_failure.trigger({
+          task_id: task.id,
+          error,
+        })
+      }).finally(() => {
+        if ($is_timeout) { return }
+        cancelProcessingTimer()
+        cancelDestroyedWatcher()
+        setCurrentProcessing(getCurrentProcessing() - 1)
+        signals.sig_receiver_processed.trigger(task.id)
+        startProcessing()
+      })
+    }
+  }
+
+  function getDoneSignal(task_id: TaskID) {
+    return getWeakMapItem(task_done_pool, task_id, () => Signal<ConveyorSendResult<ReceiverReturn>>())
+  }
+
+  const __internal_send = WithDestroy((payload: Payload) => {
+    signals.sig_send_before.trigger(payload)
+    if (getBlacklogs().length >= getBlacklogsLimit()) {
+      return Promise.resolve(__overflow_result)
+    } else {
+      let $_cancelDestroyedWatcherInSend: () => void = () => {}
+
+      const task = {
+        id: allocTaskID(),
+        payload,
+        [sym_hook_willProcess]() {
+          $_cancelDestroyedWatcherInSend()
+        }
+      }
+
+      const done_signal = getDoneSignal(task.id)
+
+      const [resolve, reject, promise] = OutterPromise<ConveyorSendResult<ReceiverReturn>>()
+
+      setBlacklogs([...getBlacklogs(), task])
+
+      $_cancelDestroyedWatcherInSend = Signal.once(sig_destroyed, () => {
+        cancelDoneWatcher()
+        reject(
+          new ConveyorError(
+            'Internal',
+            `当前 Conveyor 已经销毁.该任务(task_id=${String(task.id)})将无法处理`,
+            { cause: { task_id: task.id, payload } }
+          )
+        )
+      })
+      const cancelDoneWatcher = Signal.once(done_signal, (r) => {
+        cancelWaitimerWatcher()
+        $_cancelDestroyedWatcherInSend()
+        resolve(r)
+      })
+
+      setTaskStatus(task.id, 'in blacklogs')
+
+      setTaskIDByPromise(promise, task.id)
+
+      const cancelWaitimerWatcher = waitingTimer.mount(promise, function onTimeout(elapsed_time) {
+        const rm_result = removeBlacklogTask(task.id)
+        if (rm_result === 'removed') {
+          setTaskStatus(task.id, 'timeout in waiting')
+          resolve({ type: 'timeout in waiting', elapsed_time })
+        } else {
+          // 任务已被移出队列（开始处理或已被退役），waiting 阶段正常结束
+          // 此时无需 resolve，因为 processingTimer 会接管后续的生命周期
+        }
+      })
+
+      startProcessing()
+
+      return promise
+    }
+  })
+
+  function removeBlacklogTask(will_remove_task_id: TaskID): 'not found' | 'removed' {
+    const [removed_idx, removed_blacklogs] = removeItem(
+      getBlacklogs(),
+      task => will_remove_task_id === task.id
+    )
+    if (removed_idx === -1) {
+      return 'not found'
+    } else {
+      setBlacklogs(removed_blacklogs)
+      return 'removed'
+    }
+  }
+
+  function retireOneWithoutProcessing(will_remove_task_id: TaskID): Exclude<RetireResult, { scene: 'in processing' }> {
+    const rm_result = removeBlacklogTask(will_remove_task_id)
+    if (rm_result === 'not found') {
+      return { scene: 'not found' }
+    } else {
+      setTaskStatus(will_remove_task_id, 'retired')
+      triggerDoneSignal(will_remove_task_id, { type: 'retired' })
+      return { scene: 'retired' }
+    }
+  }
+
+  return {
+    signals,
+
+    setValve: WithDestroy(n => {
+      valve.set(n)
+      startProcessing()
+    }),
+    setBacklogsLimit: WithDestroy(n => {
+      setBlacklogsLimit(n)
+    }),
+    setWaitingTimeout: WithDestroy(waitingTimer.setTime),
+    setProcessingTimeout: WithDestroy(processingTimer.setTime),
+    getBlacklogs: WithDestroy(getBlacklogs),
+    getTaskStatus: WithDestroy(task_id => {
+      const task_status = task_status_pool.get(task_id)
+      if (task_status === undefined) {
+        throw new ConveyorError('Internal', `Task(${String(task_id)} not found)`, {
+          cause: { task_id }
+        })
+      } else {
+        return task_status
+      }
+    }),
+    retireOneIgnoreProcessing: WithDestroy(retireOneWithoutProcessing),
+    retireOne: WithDestroy(will_remove_task_id => {
+      const result = retireOneWithoutProcessing(will_remove_task_id)
+      if ((result.scene === 'not found') && taskIsProcessing(will_remove_task_id)) {
+        setTaskStatus(will_remove_task_id, 'retired in processing')
+        getAbortSignal(will_remove_task_id).trigger('outside')
+        return { scene: 'in processing' }
+      } else {
+        return result
+      }
+    }),
+    destroy: () => setDestroy(true),
+    send(payload) {
+      try {
+        return __internal_send(payload)
+      } catch (err) {
+        return Promise.reject(err)
+      }
+    }
+  }
+}
+
+
+function getWeakMapItem<K extends WeakKey, T>(
+  weakmap: WeakMap<K, T>,
+  key: K,
+  createDefault: () => T
+) {
+  const weakmap_item = weakmap.get(key)
+  if (weakmap_item === undefined) {
+    const new_item = createDefault()
+    weakmap.set(key, new_item)
+    return new_item
+  } else {
+    return weakmap_item
+  }
+}
+
+function weakMapItemIfExist<K extends WeakKey, T>(
+  weakmap: WeakMap<K, T>,
+  key: K,
+  ifExistFn: (item: T) => void
+) {
+  const weakmap_item = weakmap.get(key)
+  if (weakmap_item !== undefined) {
+    ifExistFn(weakmap_item)
+  }
+}
+
+function setTimeoutWrap(callback: () => void, time: number) {
+  if (time === 0) {
+    return { scene: 'unset' } as const
+  } else {
+    const handler = setTimeout(callback, time)
+    return { scene: 'set', handler } as const
+  }
+}
+
+function Timer(initial: number) {
+  const timeMemo = Memo(initial)
+  const [getTime, setTime] = timeMemo
+
+  return {
+    getTime,
+    setTime,
+    mount(promise: Promise<any>, __onTimeout: (elapsed_time: number) => void) {
+      const waiting_time = getTime()
+      const init_time = Date.now()
+      let $start_time = Date.now()
+      const onTimeout = () => __onTimeout(Date.now() - init_time)
+      let $timer = setTimeoutWrap(onTimeout, waiting_time)
+      if ($timer.scene === 'unset') {
+        return () => {}
+      } else {
+        function cancelOnTimeout() {
+          clearTimeout($timer.handler)
+          cancelTimeMemoWatcher()
+        }
+
+        promise.finally(cancelOnTimeout).catch(() => {})
+
+        const cancelTimeMemoWatcher = Memo.watch(timeMemo, (new_waiting_time) => {
+          const current_time = Date.now()
+          const elapsed_time = current_time - $start_time
+          const new_timer_time = new_waiting_time - elapsed_time
+          if (new_timer_time > 0) {
+            clearTimeout($timer.handler)
+            $timer = setTimeoutWrap(onTimeout, new_timer_time)
+          } else {
+            // 新的时间已经小于流逝的时间，立刻触发超时
+            clearTimeout($timer.handler)
+            onTimeout()
+          }
+        })
+
+        return cancelOnTimeout
+      }
+    },
+  }
+}
