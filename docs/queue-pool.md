@@ -1,7 +1,7 @@
 # 按 ID 分组：QueuePool（遗留）
 
 > **遗留模块**：`QueuePool` 的源码已移至 `src/legacy/queue-pool.ts`，仍从包入口导出，但不再主动演进。
-> 新代码推荐使用 [`Conveyor`](../src/conveyor.ts)：它提供阀门（并发上限）、积压上限、等待 / 处理超时与 `retire`；需要按 key 分组串行时，可以每个 key 建一个 `Conveyor` 实例。
+> 新代码推荐使用 [`Conveyor`](./conveyor.md)：它提供阀门（并发上限）、积压上限、等待 / 处理超时与 `retire`；需要按 key 分组串行时，可以每个 key 建一个 `Conveyor` 实例。
 
 `QueuePool` 为每个 ID 维护一条独立队列：**同一 ID 的任务串行，不同 ID 的任务并行**。适合“按用户 / 资源串行，全局并行”的场景。
 

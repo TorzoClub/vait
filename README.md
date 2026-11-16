@@ -20,10 +20,11 @@
 | [任务队列](./docs/queue.md) | `Queue`、`QueueSignal`、`WithPayload`、`runTask` |
 | [按 ID 的任务池](./docs/queue-pool.md) | `QueuePool` |
 | [并发控制](./docs/concurrency.md) | `concurrency`、`Valve`、`each`、`concurrentMap` |
+| [任务编排（Conveyor）](./docs/conveyor.md) | `Conveyor` 的工作流程、生命周期、超时与退役 |
 | [信号](./docs/signal.md) | `Signal` |
 | [可观察状态](./docs/memo.md) | `Memo` |
 | [上下文与事件（已废弃）](./docs/deprecated/context-event.md) | `CreateContext`、`Event`（已移至 `src/deprecated/`，未从入口导出） |
-| [实验性模块](./docs/experimental.md) | `Val`、`new_memo` |
+| [实验场](./docs/experimental.md) | `src/experimental/` 的定位与使用边界 |
 | [综合示例](./docs/examples.md) | 限流抓取、任务队列、任务池、动态并发等 |
 
 ## 安装
@@ -111,8 +112,8 @@ setTimeout(() => {
 
 ### 任务队列（遗留）
 
-> `Queue` 已移至 `src/legacy/`，仍从入口导出，但不再主动演进。新代码推荐使用 `Conveyor`
-> （阀门 / 积压上限 / 等待与处理超时 / `retire`，返回结构化结果）。
+> `Queue` 已移至 `src/legacy/`，仍从入口导出，但不再主动演进。新代码推荐使用
+> [`Conveyor`](./docs/conveyor.md)（阀门 / 积压上限 / 等待与处理超时 / `retire`，返回结构化结果）。
 
 ```javascript
 import { Queue, QueueSignal, Signal } from 'vait'
@@ -163,7 +164,7 @@ console.log(result) // [2, 4, 6, 8, 10]
 | signal | `Signal`（`.once`、`.wait`） | 发布 / 订阅信号 |
 | memo | `Memo`、`WithValidating`、`ChangedSignal` | 可观察值 + 校验 + 监听 |
 
-> `src/deprecated/` 下的 `CreateContext`、`Event` 已废弃且未从入口导出；`src/experimental/` 下的模块同样未导出，详见文档。
+> `src/deprecated/` 下的 `CreateContext`、`Event` 已废弃且未从入口导出；`src/experimental/` 是实验场，同样不导出，规则见 [实验场说明](./docs/experimental.md)。
 
 ## 开发
 

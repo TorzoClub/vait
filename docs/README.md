@@ -18,10 +18,11 @@
 | [任务队列（遗留）](./queue.md) | `Queue`、`QueueSignal`、`WithPayload`、`runTask` |
 | [按 ID 的任务池（遗留）](./queue-pool.md) | `QueuePool` |
 | [并发控制](./concurrency.md) | `concurrency`、`concurrency.Valve`、`concurrency.each`、`concurrentMap` |
+| [任务编排（Conveyor）](./conveyor.md) | `Conveyor` 的工作流程、生命周期、超时与退役 |
 | [信号](./signal.md) | `Signal`、`Signal.once`、`Signal.wait` |
 | [可观察状态](./memo.md) | `Memo`、`WithValidating`、`ChangedSignal` |
 | [上下文与事件（已废弃）](./deprecated/context-event.md) | `CreateContext`、`Event`（已移至 `src/deprecated/`，未从入口导出） |
-| [实验性模块](./experimental.md) | `Val`（data.ts）、`new_memo.ts` |
+| [实验场](./experimental.md) | `src/experimental/` 的定位与使用边界 |
 | [综合示例](./examples.md) | 限流抓取、任务队列、任务池、动态并发等 |
 
 > **遗留模块**：`queue`、`queue-pool` 已移至 `src/legacy/`，仍从包入口导出、API 未变，但不推荐用于新代码。
@@ -47,7 +48,7 @@
 | `Signal`（含 `Signal.once`、`Signal.wait`） | signal | 事件信号 |
 | `Memo`、`MemoError`、`appendTypedFunc`、`WithValidating`、`ChangedSignal` | memo | 可观察值 |
 
-> `src/deprecated/` 下的 `CreateContext`、`Event` 已废弃且未从 `src/index.ts` 导出；`src/experimental/` 下的模块同样未导出。两者都需要以源码路径引入，详见对应文档。
+> `src/deprecated/` 下的 `CreateContext`、`Event` 已废弃且未从 `src/index.ts` 导出；`src/experimental/` 是实验场，同样不导出，规则见 [实验场](./experimental.md)。
 
 ## 一分钟速览
 
