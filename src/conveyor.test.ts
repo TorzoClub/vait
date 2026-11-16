@@ -191,6 +191,47 @@ test('超时动态调整：可以在任务执行中动态修改超时时间', as
   await vi.advanceTimersByTimeAsync(1000)
 })
 
+test('处理超时只结算一次：超时后再调整超时不会重复扣减并发', async () => {
+  const abortFn = vi.fn()
+  const started: number[] = []
+  let active = 0
+  let maxActive = 0
+
+  const con = Conveyor(async (payload: number, { abort_signal }) => {
+    abort_signal.receive(abortFn)
+    started.push(payload)
+    active += 1
+    maxActive = Math.max(maxActive, active)
+    await sleep(1000)
+    active -= 1
+  })
+
+  con.setValve(1)
+  con.setProcessingTimeout(100)
+
+  const p1 = con.send(1)
+  await vi.advanceTimersByTimeAsync(100)
+
+  expect(await p1).toEqual({ type: 'timeout in processing', elapsed_time: 100 })
+  expect(abortFn).toHaveBeenCalledTimes(1)
+
+  // 任务已经超时，但 receiver 还没结束；此时再调小超时不应二次触发超时回调
+  con.setProcessingTimeout(50)
+  await vi.advanceTimersByTimeAsync(1)
+  expect(abortFn).toHaveBeenCalledTimes(1)
+
+  // 阀门为 1，且此前只超时了 1 个任务，因此只应再启动 1 个任务
+  con.send(2)
+  con.send(3)
+  await vi.advanceTimersByTimeAsync(10)
+
+  expect(started).toEqual([1, 2])
+  expect(maxActive).toBe(2)
+
+  // 收尾：让 receiver 全部结束
+  await vi.advanceTimersByTimeAsync(3000)
+})
+
 // ============================================================================
 // 4. 生命周期与状态管理 (Retire & Destroy)
 // ============================================================================

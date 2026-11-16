@@ -232,7 +232,12 @@ export function Conveyor<Payload, ReceiverReturn>(
 
       let $is_timeout = false
       const cancelProcessingTimer = processingTimer.mount(promiseMiddle, function processingTimeout(elapsed_time) {
+        // 处理超时只结算一次：先摘除定时器 watcher，
+        // 避免之后调用 setProcessingTimeout 时给已超时的任务重新挂载定时器
+        cancelProcessingTimer()
+        if ($is_timeout) { return }
         $is_timeout = true
+
         cancelDestroyedWatcher()
 
         abort_signal.trigger('timeout')
