@@ -10,6 +10,8 @@ export default [
       'coverage/**',
       'dist/**',
       'types/**',
+      // 实验性模块，API 与风格尚不稳定，暂不纳入 lint
+      'src/experimental/**',
       '**/*.test.ts',
       '**/*.test.js',
     ],

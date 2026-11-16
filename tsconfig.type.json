@@ -12,6 +12,7 @@
     "**/dist",
     "**/*.md",
     "vite.config.mts",
-    "**/*.test.ts"
+    "**/*.test.ts",
+    "src/experimental"
   ]
 }

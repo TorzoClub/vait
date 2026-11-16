@@ -15,15 +15,17 @@
 | [安装与调用方式](./getting-started.md) | 安装、引入、构建、测试、命名约定 |
 | [基础异步原语](./primitives.md) | `OutterPromise`、`Wait`、`nextTick`、`Timer`、`timeout`、`rejectTimeout` |
 | [串行执行](./sequence.md) | `Sequence`、`Concurrent` |
-| [任务队列](./queue.md) | `Queue`、`QueueSignal`、`WithPayload`、`runTask` |
-| [按 ID 的任务池](./queue-pool.md) | `QueuePool` |
+| [任务队列（遗留）](./queue.md) | `Queue`、`QueueSignal`、`WithPayload`、`runTask` |
+| [按 ID 的任务池（遗留）](./queue-pool.md) | `QueuePool` |
 | [并发控制](./concurrency.md) | `concurrency`、`concurrency.Valve`、`concurrency.each`、`concurrentMap` |
 | [信号](./signal.md) | `Signal`、`Signal.once`、`Signal.wait` |
 | [可观察状态](./memo.md) | `Memo`、`WithValidating`、`ChangedSignal` |
 | [上下文与事件](./context-event.md) | `CreateContext`、`Event`（未从入口导出） |
 | [实验性模块](./experimental.md) | `Val`（data.ts）、`new_memo.ts` |
 | [综合示例](./examples.md) | 限流抓取、任务队列、任务池、动态并发等 |
-| [下一版本规划](./next.md) | v6 特性整理：风格规范、命名重构、Conveyor、待决问题 |
+
+> **遗留模块**：`queue`、`queue-pool` 已移至 `src/legacy/`，仍从包入口导出、API 未变，但不推荐用于新代码。
+> 新项目请使用 `Conveyor`（从入口导出）：支持阀门（并发上限）、积压上限、等待 / 处理超时、`retire` 与结构化结果。
 
 ## 从包入口可以导入什么
 
@@ -38,8 +40,9 @@
 | `nextTick` | next-tick | 一个微任务 tick |
 | `Sequence` | sequence | 串行执行器 |
 | `Concurrent` | concurrent | 带并发上限的串行执行器 |
-| `Queue`、`QueueSignal`、`WithPayload`、`runTask`、`QueueError` | queue | 任务队列 |
-| `QueuePool` | queue-pool | 按 ID 分组、组内串行的任务池 |
+| `Queue`、`QueueSignal`、`WithPayload`、`runTask`、`QueueError` | legacy/queue | 任务队列（遗留） |
+| `QueuePool` | legacy/queue-pool | 按 ID 分组、组内串行的任务池（遗留） |
+| `Conveyor`、`ConveyorInstance`、`ConveyorSendResult`、`ConveyorError`、`AbortType` | conveyor | 推荐的任务编排：阀门、积压上限、超时、retire |
 | `concurrency`（含 `.Valve`、`.each`）、`concurrentMap` | concurrency / concurrent-map | 通用并发控制与并发 map |
 | `Signal`（含 `Signal.once`、`Signal.wait`） | signal | 事件信号 |
 | `Memo`、`MemoError`、`appendTypedFunc`、`WithValidating`、`ChangedSignal` | memo | 可观察值 |

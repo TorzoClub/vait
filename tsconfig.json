@@ -70,5 +70,6 @@
     /* Advanced Options */
     "forceConsistentCasingInFileNames": true  /* Disallow inconsistently-cased references to the same file. */
   },
-  "exclude": ["**/node_modules", "**/build", "**/dist", "**/*.md", "vite.config.mts"]
+  // src/experimental 为实验性模块，类型尚不稳定，暂不参与 tsc 检查
+  "exclude": ["**/node_modules", "**/build", "**/dist", "**/*.md", "vite.config.mts", "src/experimental"]
 }

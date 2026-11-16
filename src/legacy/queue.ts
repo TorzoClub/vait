@@ -1,9 +1,9 @@
-import { Memo, MemoGetter, MemoSetter } from './memo'
-import { OutterPromise } from './outter-promise'
-import { removeByItem } from './utils'
-import { nextTick } from './next-tick'
-import { Signal } from './signal'
-import { concurrency } from './concurrency'
+import { Memo, MemoGetter, MemoSetter } from '../memo'
+import { OutterPromise } from '../outter-promise'
+import { removeByItem } from '../utils'
+import { nextTick } from '../next-tick'
+import { Signal } from '../signal'
+import { concurrency } from '../concurrency'
 
 export class QueueError extends Error {}
 

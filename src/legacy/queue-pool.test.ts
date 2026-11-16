@@ -1,10 +1,10 @@
-import { nextTick } from "./next-tick"
+import { nextTick } from "../next-tick"
 import { Queue } from "./queue"
 import { QueuePool } from "./queue-pool"
-import { Signal } from "./signal"
-import { timeout } from "./timeout"
-import { Timer } from "./timer"
-import { Wait } from "./wait"
+import { Signal } from "../signal"
+import { timeout } from "../timeout"
+import { Timer } from "../timer"
+import { Wait } from "../wait"
 
 test('QueuePool', async () => {
   const pool = QueuePool<number>()
