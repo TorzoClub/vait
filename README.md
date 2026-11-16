@@ -4,7 +4,7 @@
 
 `vait` 围绕三件事提供工具：
 
-- **串行 / 并发调度**：`Sequence`、`Concurrent`、`Queue`、`QueuePool`、`concurrency`、`concurrentMap`
+- **串行 / 并发调度**：`Conveyor`、`Sequence`、`Concurrent`、`concurrency`、`concurrentMap`（`Queue`、`QueuePool` 为遗留模块）
 - **Promise 与等待**：`OutterPromise`、`Wait`、`Timer`、`timeout`、`nextTick`
 - **响应式基础件**：`Signal`、`Memo`、`WithValidating`、`ChangedSignal`
 
@@ -109,7 +109,10 @@ setTimeout(() => {
 }, 1000)
 ```
 
-### 任务队列
+### 任务队列（遗留）
+
+> `Queue` 已移至 `src/legacy/`，仍从入口导出，但不再主动演进。新代码推荐使用 `Conveyor`
+> （阀门 / 积压上限 / 等待与处理超时 / `retire`，返回结构化结果）。
 
 ```javascript
 import { Queue, QueueSignal, Signal } from 'vait'
@@ -152,8 +155,9 @@ console.log(result) // [2, 4, 6, 8, 10]
 | next-tick | `nextTick` | 微任务 tick |
 | sequence | `Sequence` | 串行执行器 |
 | concurrent | `Concurrent` | 带并发上限的执行器 |
-| queue | `Queue`、`QueueSignal`、`WithPayload`、`runTask` | 任务队列 |
-| queue-pool | `QueuePool` | 按 ID 分组、组内串行的任务池 |
+| queue（遗留） | `Queue`、`QueueSignal`、`WithPayload`、`runTask` | 任务队列，位于 `src/legacy/` |
+| queue-pool（遗留） | `QueuePool` | 按 ID 分组、组内串行的任务池，位于 `src/legacy/` |
+| conveyor | `Conveyor`、`ConveyorInstance`、`ConveyorSendResult`、`ConveyorError` | 推荐的任务编排：阀门、积压上限、超时、retire |
 | concurrency | `concurrency`（`.Valve`、`.each`） | 通用并发控制 |
 | concurrent-map | `concurrentMap` | 并发 map，保持结果顺序 |
 | signal | `Signal`（`.once`、`.wait`） | 发布 / 订阅信号 |

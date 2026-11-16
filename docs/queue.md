@@ -1,4 +1,7 @@
-# 任务队列：Queue
+# 任务队列：Queue（遗留）
+
+> **遗留模块**：`Queue` 的源码已移至 `src/legacy/queue.ts`，仍从包入口导出（`import { Queue } from 'vait'` 不受影响），但不再主动演进。
+> 新代码推荐使用 [`Conveyor`](../src/conveyor.ts)：它在 `Queue` 的基础上提供积压上限（背压）、等待 / 处理超时、`retire` 与结构化结果。
 
 `Queue` 是一个带并发上限的任务队列：任务入队后按顺序执行，可动态调整并发、监听生命周期、给任务附加 payload。
 

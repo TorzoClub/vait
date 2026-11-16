@@ -2,6 +2,8 @@
 
 以下示例均基于包入口导出的 API。
 
+> 示例 2、3、7 使用的 `Queue`、`QueuePool` 已移至 `src/legacy/`，属于遗留模块；新代码推荐改用 `Conveyor`。
+
 ---
 
 ## 1. 限流并发抓取（concurrentMap）
@@ -24,7 +26,7 @@ console.log(results.length) // 20
 
 ---
 
-## 2. 带进度与错误上报的任务队列
+## 2. 带进度与错误上报的任务队列（遗留 Queue）
 
 ```ts
 import { Queue, QueueSignal, Signal } from 'vait'
@@ -54,7 +56,7 @@ console.log('完成，成功', done, '个')
 
 ---
 
-## 3. 同一用户串行、不同用户并行（QueuePool）
+## 3. 同一用户串行、不同用户并行（遗留 QueuePool）
 
 ```ts
 import { QueuePool, Signal } from 'vait'
@@ -145,7 +147,7 @@ await running
 
 ---
 
-## 7. 任务排空前动态过滤（Queue + WithPayload）
+## 7. 任务排空前动态过滤（遗留 Queue + WithPayload）
 
 ```ts
 import { Queue, QueueSignal, WithPayload, Signal } from 'vait'

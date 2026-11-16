@@ -1,7 +1,7 @@
 import { Queue, QueueSignal, QueueWithPayload, QueueWithSignal, WithPayload } from './queue'
-import { Signal } from './signal'
-import { Memo } from './memo'
-import { Wait } from './wait'
+import { Signal } from '../signal'
+import { Memo } from '../memo'
+import { Wait } from '../wait'
 
 export type QueuePool<ID, Payload> = {
   getQueue: (id: ID) => QueueWithPayload<Payload, QueueWithSignal>,
