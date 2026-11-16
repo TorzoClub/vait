@@ -23,7 +23,6 @@
 | [上下文与事件](./context-event.md) | `CreateContext`、`Event`（未从入口导出） |
 | [实验性模块](./experimental.md) | `Val`（data.ts）、`new_memo.ts` |
 | [综合示例](./examples.md) | 限流抓取、任务队列、任务池、动态并发等 |
-| [下一版本规划](./next.md) | v6 特性整理：风格规范、命名重构、Conveyor、待决问题 |
 
 ## 从包入口可以导入什么
 
