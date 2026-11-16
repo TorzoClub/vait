@@ -78,6 +78,28 @@ test('并发控制：setValve 限制同时执行的任务数量', async () => {
   expect(maxActive).toBe(2) // 峰值并发绝对不能超过 2
 })
 
+test('setValve(Infinity) 表示不限制并发', async () => {
+  let active = 0
+  let maxActive = 0
+
+  const con = Conveyor(async () => {
+    active += 1
+    maxActive = Math.max(maxActive, active)
+    await sleep(100)
+    active -= 1
+  })
+
+  con.setValve(Infinity)
+
+  const promises = [1, 2, 3, 4, 5].map(n => con.send(n))
+  await vi.advanceTimersByTimeAsync(10)
+  expect(maxActive).toBe(5)
+
+  await vi.advanceTimersByTimeAsync(100)
+  const results = await Promise.all(promises)
+  expect(results.every(result => result.type === 'done')).toBe(true)
+})
+
 test('背压控制：setBacklogsLimit 超过阈值直接返回 overflow', async () => {
   const con = Conveyor(async () => { await sleep(100) })
 
@@ -94,11 +116,34 @@ test('背压控制：setBacklogsLimit 超过阈值直接返回 overflow', async 
   await Promise.all([p1, p2])
 })
 
+test('setBacklogsLimit(Infinity) 允许无限积压', async () => {
+  const con = Conveyor(async () => { await sleep(100) })
+
+  con.setValve(0)
+  con.setBacklogsLimit(Infinity)
+
+  const promises = Array.from({ length: 100 }, (_, i) => con.send(i))
+  expect(con.getBlacklogs()).toHaveLength(100)
+
+  con.destroy()
+  const results = await Promise.allSettled(promises)
+  expect(results.every(result => result.status === 'rejected')).toBe(true)
+})
+
+test('setBacklogsLimit 参数校验', () => {
+  const con = Conveyor(async () => {})
+
+  expect(() => con.setBacklogsLimit(-1)).toThrow(RangeError)
+  expect(() => con.setBacklogsLimit(1.5)).toThrow(TypeError)
+  expect(() => con.setBacklogsLimit(NaN)).toThrow(TypeError)
+  expect(() => con.setBacklogsLimit(Infinity)).not.toThrow()
+})
+
 // ============================================================================
 // 3. 超时机制 (Waiting & Processing) - 重点适配了 timeout=0 的逻辑
 // ============================================================================
 
-test('默认无超时限制（Infinity 的替代）：如果不显式 set，任务永远不会因为超时被干掉', async () => {
+test('默认无超时限制：默认值为 -1，不显式 set 时任务永远不会因为超时被干掉', async () => {
   const con = Conveyor(async () => { await sleep(5000) }) // 耗时 5 秒
 
   con.setValve(1)
@@ -230,6 +275,121 @@ test('处理超时只结算一次：超时后再调整超时不会重复扣减�
 
   // 收尾：让 receiver 全部结束
   await vi.advanceTimersByTimeAsync(3000)
+})
+
+test('处理超时 0 表示 0ms', async () => {
+  const abortFn = vi.fn()
+  const con = Conveyor(async (_, { abort_signal }) => {
+    abort_signal.receive(abortFn)
+    await sleep(1000)
+  })
+
+  con.setProcessingTimeout(0)
+  const p = con.send(1)
+
+  await vi.advanceTimersByTimeAsync(1)
+
+  const result = await p
+  expect(result.type).toBe('timeout in processing')
+  expect(abortFn).toHaveBeenCalledTimes(1)
+
+  await vi.advanceTimersByTimeAsync(1000)
+})
+
+test('等待超时 0 表示 0ms', async () => {
+  const con = Conveyor(async () => { await sleep(100) })
+  con.setValve(1)
+
+  const p1 = con.send(1) // 正在执行
+  const p2 = con.send(2) // 排队中
+
+  con.setWaitingTimeout(0)
+  await vi.advanceTimersByTimeAsync(1)
+
+  const r2 = await p2
+  expect(r2.type).toBe('timeout in waiting')
+
+  await vi.advanceTimersByTimeAsync(100)
+  expect((await p1).type).toBe('done')
+})
+
+test('处理超时 -1 会取消已运行的定时器', async () => {
+  const abortFn = vi.fn()
+  const con = Conveyor(async (_, { abort_signal }) => {
+    abort_signal.receive(abortFn)
+    await sleep(100)
+  })
+
+  con.setProcessingTimeout(50)
+  const p = con.send(1)
+
+  await vi.advanceTimersByTimeAsync(20)
+  con.setProcessingTimeout(-1)
+  await vi.advanceTimersByTimeAsync(200)
+
+  expect(await p).toEqual({ type: 'done', return_value: undefined })
+  expect(abortFn).not.toHaveBeenCalled()
+})
+
+test('等待超时 -1 会取消已运行的定时器', async () => {
+  const con = Conveyor(async () => { await sleep(100) })
+  con.setValve(1)
+  con.setWaitingTimeout(50)
+
+  const p1 = con.send(1) // 正在执行
+  const p2 = con.send(2) // 排队中
+
+  await vi.advanceTimersByTimeAsync(10)
+  con.setWaitingTimeout(-1)
+  await vi.advanceTimersByTimeAsync(200)
+
+  expect(await p2).toEqual({ type: 'done', return_value: undefined })
+  await p1
+})
+
+test('超时从 -1 改为正数后生效', async () => {
+  const con = Conveyor(async () => { await sleep(500) })
+
+  con.setProcessingTimeout(-1)
+  const p = con.send(1)
+
+  await vi.advanceTimersByTimeAsync(100)
+  con.setProcessingTimeout(200)
+  await vi.advanceTimersByTimeAsync(100)
+
+  expect(await p).toEqual({ type: 'timeout in processing', elapsed_time: 200 })
+
+  await vi.advanceTimersByTimeAsync(500)
+})
+
+test('超时参数校验：安全整数且 >= -1', async () => {
+  const con = Conveyor(async () => { await sleep(500) })
+
+  for (const v of [1.5, -1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    expect(() => con.setWaitingTimeout(v)).toThrow(TypeError)
+    expect(() => con.setProcessingTimeout(v)).toThrow(TypeError)
+  }
+
+  expect(() => con.setWaitingTimeout(-2)).toThrow(RangeError)
+  expect(() => con.setProcessingTimeout(-2)).toThrow(RangeError)
+  expect(() => con.setWaitingTimeout(-1)).not.toThrow()
+  expect(() => con.setWaitingTimeout(0)).not.toThrow()
+  expect(() => con.setProcessingTimeout(-1)).not.toThrow()
+  expect(() => con.setProcessingTimeout(0)).not.toThrow()
+
+  // 非法值不改变旧配置
+  con.setProcessingTimeout(100)
+  expect(() => con.setProcessingTimeout(1.5)).toThrow(TypeError)
+
+  const p = con.send(1)
+  const id = Conveyor.getTaskIDByPromise(p)!
+  await vi.advanceTimersByTimeAsync(20)
+  expect(con.getTaskStatus(id)).toBe('in processing')
+
+  await vi.advanceTimersByTimeAsync(80)
+  expect((await p).type).toBe('timeout in processing')
+
+  await vi.advanceTimersByTimeAsync(500)
 })
 
 // ============================================================================
@@ -480,11 +640,11 @@ test('destroy 时，已经在 processing 的任务不应被排队阶段遗留的
 })
 
 test('Timer 的 set 与 unset 边界，以及动态调整的兜底', async () => {
-  // 覆盖 setTimeoutWrap 中 time !== 0 的 'set' 分支和 unset 分支
+  // 覆盖 setTimeoutWrap 中 >= 0 的 'set' 分支和 -1 的 unset 分支
   const con = Conveyor(async () => {})
 
-  // 测 unset
-  con.setWaitingTimeout(0)
+  // 测 unset（-1 表示不使用定时器）
+  con.setWaitingTimeout(-1)
   const p1 = con.send(1)
   await vi.advanceTimersByTimeAsync(1)
   await p1
@@ -513,8 +673,11 @@ test('Valve 设置非法的并发值会触发校验报错', () => {
   // 覆盖 v < 0 的分支
   expect(() => con.setValve(-1)).toThrow(RangeError)
 
-  // 覆盖 !Number.isInteger(v) 且 !== Infinity 的分支
+  // 覆盖非整数分支
   expect(() => con.setValve(1.5)).toThrow(TypeError)
+
+  // Infinity 合法：表示不限制并发
+  expect(() => con.setValve(Infinity)).not.toThrow()
 })
 
 test('超时之后，底层的 receiver 才报错，应被拦截且不污染状态', async () => {

@@ -1,6 +1,7 @@
 import { Memo, WithValidating } from "./memo"
 import { OuterPromise } from "./outer-promise"
 import { Signal } from "./signal"
+import { PromiseTimer } from "./timer"
 import { ID, removeItem } from "./utils"
 
 type TaskID = ID<Symbol, 'TaskID'>
@@ -95,8 +96,8 @@ type Valve = {
 
 const Valve = (v: number): Valve => {
   const memo = WithValidating(Memo(v), v => {
-    if (!Number.isInteger(v)) {
-      throw new TypeError('concurrent_limit should be integer')
+    if (v !== Infinity && !Number.isInteger(v)) {
+      throw new TypeError('concurrent_limit should be integer or Infinity')
     } else if (v < 0) {
       throw new RangeError('concurrent_limit should >= 0')
     }
@@ -126,9 +127,18 @@ function Guard(
 const conveyor_defaults = {
   valve: 1,
   blacklogs_limit: Infinity,
-  waiting_time: 0,
-  processing_time: 0,
+  waiting_time: -1,
+  processing_time: -1,
 } as const
+
+function assertBacklogsLimit(v: number) {
+  if (v !== Infinity && !Number.isInteger(v)) {
+    throw new TypeError('blacklogs_limit should be integer or Infinity')
+  }
+  if (v < 0) {
+    throw new RangeError('blacklogs_limit should >= 0')
+  }
+}
 
 const __promise_pool = new WeakMap<Promise<any>, TaskID>()
 function getTaskIDByPromise(p: Promise<any>) {
@@ -160,8 +170,8 @@ export function Conveyor<Payload, ReceiverReturn>(
     sig_receiver_done: Signal<TaskID>(),
   }
 
-  const waitingTimer = Timer(conveyor_defaults.waiting_time)
-  const processingTimer = Timer(conveyor_defaults.processing_time)
+  const waitingTimer = PromiseTimer(conveyor_defaults.waiting_time)
+  const processingTimer = PromiseTimer(conveyor_defaults.processing_time)
 
   const valve = Valve(conveyor_defaults.valve)
   const [getBlacklogsLimit, setBlacklogsLimit] = Memo(conveyor_defaults.blacklogs_limit)
@@ -378,6 +388,7 @@ export function Conveyor<Payload, ReceiverReturn>(
       startProcessing()
     }),
     setBacklogsLimit: WithDestroy(n => {
+      assertBacklogsLimit(n)
       setBlacklogsLimit(n)
     }),
     setWaitingTimeout: WithDestroy(waitingTimer.setTime),
@@ -439,57 +450,5 @@ function weakMapItemIfExist<K extends WeakKey, T>(
   const weakmap_item = weakmap.get(key)
   if (weakmap_item !== undefined) {
     ifExistFn(weakmap_item)
-  }
-}
-
-function setTimeoutWrap(callback: () => void, time: number) {
-  if (time === 0) {
-    return { scene: 'unset' } as const
-  } else {
-    const handler = setTimeout(callback, time)
-    return { scene: 'set', handler } as const
-  }
-}
-
-function Timer(initial: number) {
-  const timeMemo = Memo(initial)
-  const [getTime, setTime] = timeMemo
-
-  return {
-    getTime,
-    setTime,
-    mount(promise: Promise<any>, __onTimeout: (elapsed_time: number) => void) {
-      const waiting_time = getTime()
-      const init_time = Date.now()
-      let $start_time = Date.now()
-      const onTimeout = () => __onTimeout(Date.now() - init_time)
-      let $timer = setTimeoutWrap(onTimeout, waiting_time)
-      if ($timer.scene === 'unset') {
-        return () => {}
-      } else {
-        function cancelOnTimeout() {
-          clearTimeout($timer.handler)
-          cancelTimeMemoWatcher()
-        }
-
-        promise.finally(cancelOnTimeout).catch(() => {})
-
-        const cancelTimeMemoWatcher = Memo.watch(timeMemo, (new_waiting_time) => {
-          const current_time = Date.now()
-          const elapsed_time = current_time - $start_time
-          const new_timer_time = new_waiting_time - elapsed_time
-          if (new_timer_time > 0) {
-            clearTimeout($timer.handler)
-            $timer = setTimeoutWrap(onTimeout, new_timer_time)
-          } else {
-            // 新的时间已经小于流逝的时间，立刻触发超时
-            clearTimeout($timer.handler)
-            onTimeout()
-          }
-        })
-
-        return cancelOnTimeout
-      }
-    },
   }
 }
