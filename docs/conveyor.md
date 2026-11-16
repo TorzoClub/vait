@@ -46,14 +46,15 @@ for (const result of results) {
 
 | 配置 | 默认值 | 设置方法 | 说明 |
 | --- | --- | --- | --- |
-| 阀门（并发上限） | `1` | `setValve(n)` | 同时处理的任务数；默认串行 |
-| 积压上限 | `Infinity` | `setBacklogsLimit(n)` | 排队任务数达到上限后，新的 `send` 直接返回 `overflow` |
-| 等待超时 | `0`（不启用） | `setWaitingTimeout(ms)` | 任务在积压中等待超过 `ms` 后以 `timeout in waiting` 结束 |
-| 处理超时 | `0`（不启用） | `setProcessingTimeout(ms)` | receiver 执行超过 `ms` 后以 `timeout in processing` 结束，并触发 `timeout` 中断 |
+| 阀门（并发上限） | `1` | `setValve(n)` | 同时处理的任务数；默认串行；`Infinity` 表示不限制 |
+| 积压上限 | `Infinity` | `setBacklogsLimit(n)` | 排队任务数达到上限后，新的 `send` 直接返回 `overflow`；`Infinity` 表示无限积压 |
+| 等待超时 | `-1`（不启用） | `setWaitingTimeout(ms)` | 任务在积压中等待超过 `ms` 后以 `timeout in waiting` 结束；`0` 表示 0ms |
+| 处理超时 | `-1`（不启用） | `setProcessingTimeout(ms)` | receiver 执行超过 `ms` 后以 `timeout in processing` 结束，并触发 `timeout` 中断；`0` 表示 0ms |
 
-- `setValve` 只接受**非负整数**：负整数抛 `RangeError`；非整数（包括小数、`NaN`、`Infinity`）抛 `TypeError`。设为 `0` 会暂停派发新任务（已在执行的任务不受影响），之后再调大即可继续。
-- 积压上限只统计**排队中**的任务，不包含正在处理的任务；检查发生在任务入队之前（`当前积压数 >= limit` 即溢出），因此 `setBacklogsLimit(0)` 会让所有 `send` 都返回 `overflow`，即使当前有空闲工位。
-- 超时默认 `0` 表示**挂载时不启用定时器**；详见下文「超时机制」。
+- `setValve` 接受**非负整数或 `Infinity`**：负整数抛 `RangeError`；非整数（包括小数、`NaN`）抛 `TypeError`；`Infinity` 表示不限制并发。设为 `0` 会暂停派发新任务（已在执行的任务不受影响），之后再调大即可继续。
+- 积压上限接受**非负整数或 `Infinity`**：负整数抛 `RangeError`；小数、`NaN` 抛 `TypeError`；`Infinity` 表示无限积压（只受内存限制）。积压上限只统计**排队中**的任务，不包含正在处理的任务；检查发生在任务入队之前（`当前积压数 >= limit` 即溢出），因此 `setBacklogsLimit(0)` 会让所有 `send` 都返回 `overflow`，即使当前有空闲工位。
+- 两个超时 setter 接受**安全整数且 `>= -1`**：`-1` 表示不使用定时器，`0` 表示 0ms，正数表示毫秒；`Infinity`、小数、`NaN`、超出安全整数范围会抛 `TypeError`，小于 `-1` 的整数抛 `RangeError`。校验失败不会改变旧配置。
+- 超时底层由 `PromiseTimer` 实现，时间语义详见 [定时器](./timer.md)。
 
 ---
 
@@ -160,7 +161,9 @@ send(payload)
 
 - `elapsed_time` 是任务实际经过的时间（从挂载定时器算起），可能大于配置值。例如配置 500ms、执行 200ms 后把超时改成 100ms，会在约 200ms 处触发，`elapsed_time ≈ 200`。
 - 动态修改超时是全局的，会影响该 Conveyor 上所有已挂载的定时器：按 `新时限 - 已流逝时间` 重新计算，剩余时间 `<= 0` 时立即触发。
-- `0` 在**挂载时**表示不启用；但运行中把超时改成 `0` 会因「剩余时间 <= 0」立即触发一次超时。不要用 `0` 或 `Infinity` 表示「运行中动态关闭」，当前实现没有这个语义。
+- `-1` 表示**不使用定时器**：如果该任务已有定时器，会取消它，不再触发；之后改成正数或 `0` 仍可重新生效（从挂载时刻计算已流逝时间）。
+- `0` 是合法计时值，表示 0ms 定时器（异步触发），不是「关闭」。
+- `Infinity` 不是合法超时值，会抛 `TypeError`。
 
 ---
 
@@ -287,12 +290,12 @@ const result = await promise
 
 ## 已知边界
 
-- `setValve(Infinity)` 会抛 `TypeError`；`Conveyor` 的阀门只接受有限整数（这一点与 `concurrency.Valve` 不同）。
+- `setValve(Infinity)` 合法，表示不限制并发；`setBacklogsLimit(Infinity)` 合法，表示无限积压。
+- `setWaitingTimeout(Infinity)` / `setProcessingTimeout(Infinity)` 会抛 `TypeError`；超时只接受安全整数（`-1` 或 `>= 0`）。
 - `setBacklogsLimit(0)` 会让所有 `send` 溢出，即使当前没有任务在执行。
 - `getBlacklogs()` 返回内部数组引用，外部修改会破坏队列；需要快照请自行 `[...con.getBlacklogs()]`。
 - `destroy` 后，排队任务的状态仍可能显示为 `in blacklogs`（当前实现不会改写为 `destroyed`）。
 - 执行中 `retireOne` 不结算 `send()` 为 `retired`，详见上文。
-- 运行中把超时改为 `0` 会立即触发一次超时，而不是关闭超时。
 - 超时配置是 Conveyor 级别的，会同时影响该实例上所有已挂载的定时器。
 
 ---

@@ -6,6 +6,7 @@ import {
   Wait, WaitingRejected,
   nextTick,
   Timer,
+  PromiseTimer,
   timeout, rejectTimeout, TimeoutRejected,
 } from 'vait'
 ```
@@ -95,27 +96,18 @@ await nextTick()
 
 ---
 
-## Timer
+## Timer 与 PromiseTimer
 
-`setTimeout` 的可取消封装。
+`Timer(ms, fn)` 是 `setTimeout` 的可取消封装，只执行一次：
 
 ```ts
 const cancel = Timer(1000, () => console.log('1s later'))
 cancel() // 取消，回调不再执行
 ```
 
-**API**
+需要可动态调整的超时控制、`-1`（不使用定时器）/ `0`（0ms）语义，或把定时器挂到 Promise 生命周期上时，使用 `PromiseTimer`。
 
-| 项 | 说明 |
-| --- | --- |
-| 参数 | `(ms: number, fn: () => void)` |
-| 返回 | `() => void`，调用即取消 |
-| 类型 | `CancelTimer` |
-
-**细节**
-
-- 只执行一次，不重复。
-- 重复调用取消函数是安全的（底层 `clearTimeout` 幂等）。
+完整的 API、校验规则与示例见 [定时器](./timer.md)。
 
 ---
 

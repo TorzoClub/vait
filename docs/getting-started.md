@@ -71,6 +71,7 @@ import { CreateContext } from './src/deprecated/context' // 已废弃、未从�
 ## 分模块阅读顺序建议
 
 - 先看 [基础异步原语](./primitives.md) 理解 `Wait` / `timeout`；
+- 需要自定义超时控制时看 [定时器（Timer / PromiseTimer）](./timer.md)；
 - 再看 [串行执行](./sequence.md) 与 [任务队列](./queue.md)，这是最常用的调度工具；
 - 需要限制并发时看 [并发控制](./concurrency.md)；
 - 需要背压、超时、单任务中断或结构化任务结果时看 [任务编排（Conveyor）](./conveyor.md)；

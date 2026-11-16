@@ -3,7 +3,7 @@
 `vait` 是一组面向异步编程的实用工具函数，核心围绕三件事：
 
 - **串行 / 并发调度**：让任务按顺序执行，或限制同时执行的任务数量。
-- **Promise 与等待**：手动控制 Promise 的完成时机（`OuterPromise`、`Wait`）、延时与超时（`Timer`、`timeout`）。
+- **Promise 与等待**：手动控制 Promise 的完成时机（`OuterPromise`、`Wait`）、延时与超时（`Timer`、`PromiseTimer`、`timeout`）。
 - **响应式基础件**：可观察的值（`Memo`）、事件信号（`Signal`）、类型化上下文（`CreateContext`）。
 
 > 本目录文档基于仓库当前源码（分支 `v5`）编写，而不是已发布到 npm 的旧版 `dist`。若要发布，请先执行 `npm run build` 重新生成 `dist/` 与 `types/`。
@@ -14,6 +14,7 @@
 | --- | --- |
 | [安装与调用方式](./getting-started.md) | 安装、引入、构建、测试、命名约定 |
 | [基础异步原语](./primitives.md) | `OuterPromise`、`Wait`、`nextTick`、`Timer`、`timeout`、`rejectTimeout` |
+| [定时器（Timer / PromiseTimer）](./timer.md) | 可取消定时器、`PromiseTimer` 的动态超时与 `-1`/`0` 语义 |
 | [串行执行](./sequence.md) | `Sequence`、`Concurrent` |
 | [任务队列（遗留）](./queue.md) | `Queue`、`QueueSignal`、`WithPayload`、`runTask` |
 | [按 ID 的任务池（遗留）](./queue-pool.md) | `QueuePool` |
@@ -36,7 +37,7 @@
 | --- | --- | --- |
 | `Wait`、`WaitingRejected` | wait | 手动控制完成时机的等待对象 |
 | `OuterPromise` | outer-promise | 暴露 `resolve/reject` 的 Promise 三元组 |
-| `Timer` | timer | 可取消的 `setTimeout` |
+| `Timer`、`PromiseTimer` | timer | 可取消的 `setTimeout` / 可动态调整的 Promise 定时器 |
 | `timeout`、`rejectTimeout`、`TimeoutRejected` | timeout | 延时等待，可被外部取消 |
 | `nextTick` | next-tick | 一个微任务 tick |
 | `Sequence` | sequence | 串行执行器 |
