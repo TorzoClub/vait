@@ -2,7 +2,7 @@
 
 ```ts
 import {
-  OutterPromise,
+  OuterPromise,
   Wait, WaitingRejected,
   nextTick,
   Timer,
@@ -12,12 +12,12 @@ import {
 
 ---
 
-## OutterPromise
+## OuterPromise
 
 把 Promise 的 `resolve` / `reject` 暴露到外部，适合做回调桥接。
 
 ```ts
-const [resolve, reject, promise] = OutterPromise<number>()
+const [resolve, reject, promise] = OuterPromise<number>()
 
 resolve(42)
 await promise // 42
@@ -26,7 +26,7 @@ await promise // 42
 不传类型参数时类型为 `void`：
 
 ```ts
-const [ok, fail, p] = OutterPromise()
+const [ok, fail, p] = OuterPromise()
 fail(new Error('nope'))
 await p.catch(e => console.log(e.message)) // nope
 ```
@@ -36,13 +36,13 @@ await p.catch(e => console.log(e.message)) // nope
 | 项 | 说明 |
 | --- | --- |
 | 返回 | `readonly [resolve, reject, promise]` |
-| 泛型 | `OutterPromise<T>()`；默认 `T = void` |
+| 泛型 | `OuterPromise<T>()`；默认 `T = void` |
 
 ---
 
 ## Wait
 
-`OutterPromise` 的语义化封装：`Wait()` 返回 `[waiting, go, cancel]`。
+`OuterPromise` 的语义化封装：`Wait()` 返回 `[waiting, go, cancel]`。
 
 ```ts
 const [waiting, go, cancel] = Wait<string>()

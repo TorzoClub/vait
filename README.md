@@ -5,7 +5,7 @@
 `vait` 围绕三件事提供工具：
 
 - **串行 / 并发调度**：`Conveyor`、`Sequence`、`Concurrent`、`concurrency`、`concurrentMap`（`Queue`、`QueuePool` 为遗留模块）
-- **Promise 与等待**：`OutterPromise`、`Wait`、`Timer`、`timeout`、`nextTick`
+- **Promise 与等待**：`OuterPromise`、`Wait`、`Timer`、`timeout`、`nextTick`
 - **响应式基础件**：`Signal`、`Memo`、`WithValidating`、`ChangedSignal`
 
 ## 文档
@@ -15,7 +15,7 @@
 | 文档 | 内容 |
 | --- | --- |
 | [安装与调用方式](./docs/getting-started.md) | 安装、引入、构建、测试、命名约定 |
-| [基础异步原语](./docs/primitives.md) | `OutterPromise`、`Wait`、`nextTick`、`Timer`、`timeout` |
+| [基础异步原语](./docs/primitives.md) | `OuterPromise`、`Wait`、`nextTick`、`Timer`、`timeout` |
 | [串行执行](./docs/sequence.md) | `Sequence`、`Concurrent` |
 | [任务队列](./docs/queue.md) | `Queue`、`QueueSignal`、`WithPayload`、`runTask` |
 | [按 ID 的任务池](./docs/queue-pool.md) | `QueuePool` |
@@ -149,7 +149,7 @@ console.log(result) // [2, 4, 6, 8, 10]
 | 模块 | 主要导出 | 用途 |
 | --- | --- | --- |
 | wait | `Wait`、`WaitingRejected` | 手动完成 / 取消一个等待 |
-| outter-promise | `OutterPromise` | 暴露 resolve / reject 的 Promise |
+| outer-promise | `OuterPromise` | 暴露 resolve / reject 的 Promise |
 | timer | `Timer` | 可取消的定时器 |
 | timeout | `timeout`、`rejectTimeout`、`TimeoutRejected` | 延时与超时取消 |
 | next-tick | `nextTick` | 微任务 tick |

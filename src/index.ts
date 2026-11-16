@@ -1,5 +1,5 @@
 export * from './wait'
-export * from './outter-promise'
+export * from './outer-promise'
 export * from './concurrent'
 export * from './concurrency'
 export * from './concurrent-map'

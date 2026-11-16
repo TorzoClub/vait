@@ -1,5 +1,5 @@
 import { Memo, WithValidating } from "./memo"
-import { OutterPromise } from "./outter-promise"
+import { OuterPromise } from "./outer-promise"
 import { Signal } from "./signal"
 import { ID, removeItem } from "./utils"
 
@@ -300,7 +300,7 @@ export function Conveyor<Payload, ReceiverReturn>(
 
       const done_signal = getDoneSignal(task.id)
 
-      const [resolve, reject, promise] = OutterPromise<ConveyorSendResult<ReceiverReturn>>()
+      const [resolve, reject, promise] = OuterPromise<ConveyorSendResult<ReceiverReturn>>()
 
       setBlacklogs([...getBlacklogs(), task])
 

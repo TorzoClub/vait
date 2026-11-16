@@ -63,7 +63,7 @@ import { CreateContext } from './src/deprecated/context' // 已废弃、未从�
 
 1. **大写开头的是工厂函数**：`Wait()`、`Queue()`、`Signal()`、`Memo()`、`CreateContext()` 返回对象或元组；`Timer`、`Sequence`、`Concurrent` 直接返回函数。
 2. **小写开头的是普通函数**：`timeout`、`nextTick`、`runTask`、`concurrency`、`concurrentMap`。
-3. **元组返回值按位置解构**：`const [waiting, go] = Wait()`、`const [get, set] = Memo(0)`、`const [resolve, reject, promise] = OutterPromise()`。
+3. **元组返回值按位置解构**：`const [waiting, go] = Wait()`、`const [get, set] = Memo(0)`、`const [resolve, reject, promise] = OuterPromise()`。
 4. **取消订阅一律返回取消函数**：`Signal.receive`、`Memo.watch`、`Event.on` 等都返回 `() => void`。
 5. **错误策略**：队列 / 任务池里单个任务失败不会中断整体；`Signal.trigger` 默认吞掉监听器错误并 `console.warn`，需要抛出时用 `triggerCareError`；`concurrency` 则采用“首个错误向外抛出”的语义。
 6. **`task` 不返回 Promise**：`Queue.task`、`QueuePool.addTask` 返回 `void`，需要拿到结果请用 `runTask`。
