@@ -1,6 +1,6 @@
-# 上下文与事件
+# 上下文与事件（已废弃）
 
-> 这两个模块**尚未从 `src/index.ts` 导出**，`import { CreateContext } from 'vait'` 不可用。若项目内使用，请从源码路径引入，例如 `import { CreateContext } from './context'`。它们属于内部 / 实验性能力，API 可能调整。
+> **已废弃**：这两个模块已移至 `src/deprecated/`，并且**没有**从 `src/index.ts` 导出，`import { CreateContext } from 'vait'` 不可用。请勿在新代码中使用；若需查阅，请从源码路径引入，例如 `import { CreateContext } from './deprecated/context'`。
 
 ---
 
@@ -9,7 +9,7 @@
 一个带类型、键集合固定的共享容器。
 
 ```ts
-import { CreateContext } from './context'
+import { CreateContext } from './deprecated/context'
 
 const ctx = CreateContext({ count: 0, name: 'vait' })
 
@@ -61,7 +61,7 @@ function inc(ctx: Ctx) {
 带类型约束的多事件发布 / 订阅。
 
 ```ts
-import { Event } from './event'
+import { Event } from './deprecated/event'
 
 const ev = Event<{
   message: string

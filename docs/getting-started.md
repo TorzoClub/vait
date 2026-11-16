@@ -43,7 +43,7 @@ const { timeout, Wait, QueuePool } = require('vait')
 
 ```ts
 import { Sequence } from './src'        // 等价于 ./src/index.ts
-import { CreateContext } from './src/context' // 未从入口导出的模块
+import { CreateContext } from './src/deprecated/context' // 已废弃、未从入口导出的模块
 ```
 
 ## 构建与测试

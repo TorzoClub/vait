@@ -20,7 +20,7 @@
 | [并发控制](./concurrency.md) | `concurrency`、`concurrency.Valve`、`concurrency.each`、`concurrentMap` |
 | [信号](./signal.md) | `Signal`、`Signal.once`、`Signal.wait` |
 | [可观察状态](./memo.md) | `Memo`、`WithValidating`、`ChangedSignal` |
-| [上下文与事件](./context-event.md) | `CreateContext`、`Event`（未从入口导出） |
+| [上下文与事件（已废弃）](./deprecated/context-event.md) | `CreateContext`、`Event`（已移至 `src/deprecated/`，未从入口导出） |
 | [实验性模块](./experimental.md) | `Val`（data.ts）、`new_memo.ts` |
 | [综合示例](./examples.md) | 限流抓取、任务队列、任务池、动态并发等 |
 
@@ -47,7 +47,7 @@
 | `Signal`（含 `Signal.once`、`Signal.wait`） | signal | 事件信号 |
 | `Memo`、`MemoError`、`appendTypedFunc`、`WithValidating`、`ChangedSignal` | memo | 可观察值 |
 
-> `context.ts`、`event.ts`、`data.ts`、`new_memo.ts` 目前**没有**从 `src/index.ts` 导出，需要以源码路径引入，详见对应文档。
+> `src/deprecated/` 下的 `CreateContext`、`Event` 已废弃且未从 `src/index.ts` 导出；`src/experimental/` 下的模块同样未导出。两者都需要以源码路径引入，详见对应文档。
 
 ## 一分钟速览
 

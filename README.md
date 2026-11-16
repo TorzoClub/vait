@@ -22,7 +22,7 @@
 | [并发控制](./docs/concurrency.md) | `concurrency`、`Valve`、`each`、`concurrentMap` |
 | [信号](./docs/signal.md) | `Signal` |
 | [可观察状态](./docs/memo.md) | `Memo` |
-| [上下文与事件](./docs/context-event.md) | `CreateContext`、`Event`（未从入口导出） |
+| [上下文与事件（已废弃）](./docs/deprecated/context-event.md) | `CreateContext`、`Event`（已移至 `src/deprecated/`，未从入口导出） |
 | [实验性模块](./docs/experimental.md) | `Val`、`new_memo` |
 | [综合示例](./docs/examples.md) | 限流抓取、任务队列、任务池、动态并发等 |
 
@@ -163,7 +163,7 @@ console.log(result) // [2, 4, 6, 8, 10]
 | signal | `Signal`（`.once`、`.wait`） | 发布 / 订阅信号 |
 | memo | `Memo`、`WithValidating`、`ChangedSignal` | 可观察值 + 校验 + 监听 |
 
-> `context.ts`、`event.ts`、`data.ts`、`new_memo.ts` 尚未从入口导出，详见文档。
+> `src/deprecated/` 下的 `CreateContext`、`Event` 已废弃且未从入口导出；`src/experimental/` 下的模块同样未导出，详见文档。
 
 ## 开发
 
