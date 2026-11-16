@@ -1,7 +1,0 @@
-build
-node_modules
-coverage
-dist
-types
-*.test.ts
-*.test.js

@@ -13,15 +13,16 @@ jobs:
 
     steps:
     - name: Copy Repo Files
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
     - name: Use Node.js
-      uses: actions/setup-node@v1
+      uses: actions/setup-node@v4
       with:
-        node-version: '20'
+        node-version: '24'
+        cache: 'npm'
     - name: Install modules
-      run: npm install
-    - name: ESLint
-      run: npm run test
+      run: npm ci
+    - name: Test
+      run: npm test
 
   CodeCheck:
     name: CodeCheck
@@ -29,15 +30,16 @@ jobs:
 
     steps:
     - name: Copy Repo Files
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
 
     - name: Use Node.js
-      uses: actions/setup-node@v1
+      uses: actions/setup-node@v4
       with:
-        node-version: '20'
+        node-version: '24'
+        cache: 'npm'
     - name: Install modules
-      run: npm install
+      run: npm ci
     - name: ESLint
       run: npm run lint-strict
     - name: TSC
-      run: npm run runtsc --noEmit
+      run: npm run runtsc

@@ -24,7 +24,7 @@ test('timeout timing', async () => {
 test('rejectTimeout', async () => {
   const waiting = timeout(100)
   rejectTimeout(waiting)
-  expect(waiting).rejects.toThrow(TimeoutRejected)
+  await expect(waiting).rejects.toThrow(TimeoutRejected)
 })
 
 test('rejectTimeout 无效的waiting', async () => {

@@ -84,7 +84,7 @@ test('在错误发生后尽可能地阻止并发执行', async () => {
     expect(resolved_count).toBe(0)
   })
 
-  expect(() => (
+  await expect(
     concurrency(3, range(0, 5)[Symbol.iterator](), async (_, idx) => {
       revoke_count += 1
       if (idx === 1) {
@@ -97,7 +97,7 @@ test('在错误发生后尽可能地阻止并发执行', async () => {
         })
       }
     })
-  )).rejects.toThrow('failurexxx')
+  ).rejects.toThrow('failurexxx')
 
   await timeout(200)
   expect(timertimeout).toBe(1)
@@ -184,12 +184,12 @@ test('concurrency() should support Infinity max concurrency', async () => {
   })
   expect(revoke_count).toBe(10)
 
-  expect(() => (
+  await expect(
     concurrency(-Infinity, range(0, 9)[Symbol.iterator](), () => {
       revoke_count += 1
       return waiting
     })
-  )).rejects.toThrow()
+  ).rejects.toThrow()
 
   expect(revoke_count).toBe(10)
 

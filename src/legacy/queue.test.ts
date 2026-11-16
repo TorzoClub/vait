@@ -1,13 +1,11 @@
 import assert from 'assert'
 import { Queue, QueueSignal, WithPayload, runTask } from './queue'
-import { timeout } from './timeout'
-import { Wait } from './wait'
-import { Memo } from './memo'
-import { Signal } from './signal'
-import { concurrency } from './concurrency'
-import { nextTick } from './next-tick'
-
-jest.setTimeout(7500)
+import { timeout } from '../timeout'
+import { Wait } from '../wait'
+import { Memo } from '../memo'
+import { Signal } from '../signal'
+import { concurrency } from '../concurrency'
+import { nextTick } from '../next-tick'
 
 test('runTask (Queue', async () => {
   const q = Queue()

@@ -30,8 +30,8 @@ export const ExecuteHandlers = <P>(ignore_error: boolean, getHandlers: () => Han
 )
 
 export type Signal<P = void> = Readonly<{
-  trigger: P extends void ? () => void : (payload: P) => void
-  triggerCareError: P extends void ? () => void : (payload: P) => void
+  trigger: [P] extends [void] ? () => void : (payload: P) => void
+  triggerCareError: [P] extends [void] ? () => void : (payload: P) => void
   receive(fn: (payload: P) => void): () => void
   cancelReceive(fn: (payload: P) => void): void
   isEmpty(): boolean

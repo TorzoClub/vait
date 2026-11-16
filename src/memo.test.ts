@@ -1,3 +1,4 @@
+import { vi } from 'vitest'
 import { Memo, MemoError, WithValidating, ChangedSignal } from './memo'
 import assert from 'assert'
 
@@ -302,7 +303,7 @@ test('WatchMemo remove watcher', () => {
 test('Memo.watch should prevent recursive updates', () => {
   const memo = Memo(0)
   const [getData, setData] = memo
-  const callback = jest.fn();
+  const callback = vi.fn();
 
   expect(() => {
     Memo.watch(memo, (newValue) => {
@@ -319,7 +320,7 @@ test('Memo.watch should prevent recursive updates', () => {
 test('Watcher should handle multiple removals gracefully', () => {
   const memo = Memo(10)
   const [,setData] = memo
-  const callback = jest.fn()
+  const callback = vi.fn()
   const unwatch = Memo.watch(memo, callback)
 
   unwatch()
@@ -366,7 +367,7 @@ test('WithWatching/Memo.watch should prevent recursive updates', () => {
 test('Memo.watch should work with validators', () => {
   const memo = Memo(10)
   const [getData, setData] = memo
-  const callback = jest.fn()
+  const callback = vi.fn()
 
   Memo.addValidator(memo, positiveValidator)
   Memo.watch(memo, callback)
