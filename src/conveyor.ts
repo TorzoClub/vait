@@ -1,8 +1,8 @@
 import { Memo, WithValidating } from "./memo"
 import { OuterPromise } from "./outer-promise"
 import { Signal } from "./signal"
-import { ConveyorTimer } from "./conveyor-timer"
-import { getWeakMapItem, ID, removeItem, weakMapItemIfExist } from "./utils"
+import { ConveyorTimer } from "./internal/conveyor-timer"
+import { getWeakMapItem, ID, removeItem, weakMapItemIfExist } from "./internal/utils"
 
 type TaskID = ID<Symbol, 'TaskID'>
 

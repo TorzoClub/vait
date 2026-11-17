@@ -1,5 +1,5 @@
 import { Signal } from './signal'
-import { ID, removeByItem } from './utils'
+import { ID, removeByItem } from './internal/utils'
 
 type FuncType = 'getter' | 'setter' | 'before' | 'after'
 

@@ -1,6 +1,6 @@
 import { Memo, MemoGetter, MemoSetter } from '../memo'
 import { OuterPromise } from '../outer-promise'
-import { removeByItem } from '../utils'
+import { removeByItem } from '../internal/utils'
 import { nextTick } from '../next-tick'
 import { Signal } from '../signal'
 import { concurrency } from '../concurrency'

@@ -1,5 +1,5 @@
 import { Memo } from './memo'
-import { removeByItem } from './utils'
+import { removeByItem } from './internal/utils'
 import { Wait } from './wait'
 
 export type Handler<P> = (payload: P) => void
