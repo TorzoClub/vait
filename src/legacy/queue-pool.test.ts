@@ -3,7 +3,6 @@ import { Queue } from "./queue"
 import { QueuePool } from "./queue-pool"
 import { Signal } from "../signal"
 import { timeout } from "../timeout"
-import { Timer } from "../timer"
 import { Wait } from "../wait"
 
 test('QueuePool', async () => {
@@ -108,7 +107,7 @@ test('QueuePool ALL_DONE signal', async () => {
     return waiting
   })
 
-  Timer(100, ok)
+  timeout(100).then(ok)
 
   await Signal.wait( pool.signal.ALL_DONE )
 

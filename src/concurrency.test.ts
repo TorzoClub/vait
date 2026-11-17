@@ -3,7 +3,6 @@ import { timeout } from './timeout'
 import { Wait } from './wait'
 import { nextTick } from './next-tick'
 import { Signal } from './signal'
-import { Timer } from './timer'
 import { concurrency } from './concurrency'
 import { Memo } from './memo'
 
@@ -70,7 +69,7 @@ test('在错误发生后尽可能地阻止并发执行', async () => {
   let rejected_count = 0
 
   let timertimeout = 0
-  Timer(100, async () => {
+  timeout(100).then(async () => {
     timertimeout += 1
     await timeout(100)
 
@@ -263,7 +262,7 @@ test('concurrency() should dynamically change the max concurrency', async () => 
 
   expect(resolved_idx_list.indexOf(1)).toBe(-1)
 
-  Timer(100, () => {
+  timeout(100).then(() => {
     const [, resolve] = pedding_tasks[1]
     resolve()
   })
@@ -412,13 +411,10 @@ test('concurrency() should set valve in async function', async () => {
     async (_, idx) => {
       revoke_count += 1
       concurrencyValve.set(0)
-      Timer(
-        Math.floor(Math.random() * 100),
-        () => {
-          concurrencyValve.set(1)
-          resolved_idx_list.push(idx)
-        }
-      )
+      timeout(Math.floor(Math.random() * 100)).then(() => {
+        concurrencyValve.set(1)
+        resolved_idx_list.push(idx)
+      })
     },
   )
 

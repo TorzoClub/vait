@@ -19,9 +19,10 @@ export class TimeoutRejected extends Error {}
 
 export function timeout(ms: number) {
   const [ resolve, reject, waiting ] = OuterPromise<void>()
-  const cancelTimer = Timer(ms, resolve)
+  const timer = Timer(Date.now, resolve)
+  timer.set(ms)
   handlers.set(waiting, (cause) => {
-    cancelTimer()
+    timer.cancel()
     reject(new TimeoutRejected('timeout cancel', { cause }))
   })
   return waiting

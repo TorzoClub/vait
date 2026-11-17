@@ -1,108 +1,126 @@
-import { Memo, WithValidating } from './memo'
-
-export type CancelTimer = () => void
-
-export function Timer(ms: number, fn: () => void): CancelTimer {
-  const handler = setTimeout(fn, ms)
-  return () => clearTimeout(handler)
-}
-
-export type PromiseTimer = Readonly<{
-  getTime(): number
-  setTime(t: number): void
-  mount(
-    promise: Promise<unknown>,
-    onTimeout: (elapsed_time: number) => void,
-  ): CancelTimer
+export type Timer = Readonly<{
+  set(ms: number): void
+  cancel(): void
+  countdown(): number
+  elapsedTime(): number
 }>
 
-type TimerHandle =
-  | { scene: 'unset' }
-  | { scene: 'set', handler: ReturnType<typeof setTimeout> }
+type TimerState = 'idle' | 'running' | 'canceled' | 'fired'
 
-function validateTimeoutValue(v: number) {
-  if (!Number.isSafeInteger(v)) {
-    throw new TypeError('timeout should be a safe integer')
-  }
-  if (v < -1) {
-    throw new RangeError('timeout should >= -1')
+function assertTimerDuration(ms: number) {
+  if (!Number.isSafeInteger(ms)) {
+    throw new TypeError('timer duration should be a safe integer')
+  } else if (ms < 0) {
+    throw new RangeError('timer duration should >= 0')
   }
 }
 
-function setTimeoutWrap(callback: () => void, time: number): TimerHandle {
-  if (time < 0) {
-    return { scene: 'unset' }
-  } else {
-    const handler = setTimeout(callback, time)
-    return { scene: 'set', handler }
-  }
-}
+export function Timer(
+  clock: () => number,
+  onTimeout: () => void,
+): Timer {
+  let state: TimerState = 'idle'
+  let start_time = 0
+  let total_time = 0
+  let timer_handle: ReturnType<typeof setTimeout> | undefined
+  let frozen_elapsed_time = 0
+  let frozen_countdown = Infinity
 
-export function PromiseTimer(initial: number): PromiseTimer {
-  const timeMemo = WithValidating(Memo(initial), validateTimeoutValue)
-  const [getTime, setTime] = timeMemo
+  function elapsedNow() {
+    return clock() - start_time
+  }
+
+  function countdownNow() {
+    return Math.max(0, total_time - elapsedNow())
+  }
+
+  function clearTimer() {
+    if (timer_handle !== undefined) {
+      clearTimeout(timer_handle)
+      timer_handle = undefined
+    }
+  }
+
+  function freeze() {
+    if (state === 'idle') {
+      frozen_elapsed_time = 0
+      frozen_countdown = Infinity
+    } else if (state === 'running') {
+      frozen_elapsed_time = elapsedNow()
+      frozen_countdown = countdownNow()
+    }
+  }
+
+  function fire() {
+    if (state !== 'running') { return }
+    freeze()
+    state = 'fired'
+    frozen_countdown = 0
+    onTimeout()
+  }
+
+  function schedule(ms: number) {
+    clearTimer()
+    timer_handle = setTimeout(fire, ms)
+  }
+
+  function set(ms: number) {
+    assertTimerDuration(ms)
+
+    if (state === 'canceled') {
+      throw new Error('Timer has been canceled')
+    }
+    if (state === 'fired') {
+      throw new Error('Timer has already fired')
+    }
+
+    if (state === 'idle') {
+      state = 'running'
+      start_time = clock()
+      total_time = ms
+      schedule(ms)
+      return
+    }
+
+    // running: keep the original start_time, only change the total duration
+    total_time = ms
+
+    if (ms === 0) {
+      schedule(0)
+      return
+    }
+
+    const remaining_time = ms - elapsedNow()
+    if (remaining_time > 0) {
+      schedule(remaining_time)
+    } else {
+      clearTimer()
+      fire()
+    }
+  }
+
+  function cancel() {
+    if (state === 'canceled' || state === 'fired') { return }
+    freeze()
+    clearTimer()
+    state = 'canceled'
+  }
 
   return {
-    getTime,
-    setTime,
-    mount(promise, onTimeout) {
-      const init_time = Date.now()
-      let $timer: TimerHandle = { scene: 'unset' }
-      let $is_timeout = false
-      let cancelTimeMemoWatcher: CancelTimer = () => {}
-
-      function unschedule() {
-        if ($timer.scene === 'set') {
-          clearTimeout($timer.handler)
-          $timer = { scene: 'unset' }
-        }
+    set,
+    cancel,
+    countdown() {
+      if (state === 'running') { return countdownNow() }
+      if (state === 'canceled') { return frozen_countdown }
+      if (state === 'fired') { return 0 }
+      return Infinity
+    },
+    elapsedTime() {
+      if (state === 'running') { return elapsedNow() }
+      if (state === 'canceled' || state === 'fired') {
+        return frozen_elapsed_time
       }
-
-      function fire() {
-        if ($is_timeout) { return }
-        $is_timeout = true
-        unschedule()
-        cancelTimeMemoWatcher()
-        onTimeout(Date.now() - init_time)
-      }
-
-      function cancel() {
-        unschedule()
-        cancelTimeMemoWatcher()
-      }
-
-      function schedule(time: number) {
-        unschedule()
-        $timer = setTimeoutWrap(fire, time)
-      }
-
-      const initial_time = getTime()
-      if (initial_time >= 0) {
-        schedule(initial_time)
-      }
-
-      promise.finally(cancel).catch(() => {})
-
-      cancelTimeMemoWatcher = Memo.watch(timeMemo, (new_time) => {
-        if ($is_timeout) { return }
-        if (new_time < 0) {
-          unschedule()
-          return
-        }
-        if (new_time === 0) {
-          schedule(0)
-          return
-        }
-        const elapsed_time = Date.now() - init_time
-        const remaining_time = new_time - elapsed_time
-        if (remaining_time > 0) {
-          schedule(remaining_time)
-        } else {
-          fire()
-        }
-      })
-
-      return cancel
+      return 0
     },
   }
 }

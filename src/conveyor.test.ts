@@ -347,7 +347,7 @@ test('等待超时 -1 会取消已运行的定时器', async () => {
   await p1
 })
 
-test('超时从 -1 改为正数后生效', async () => {
+test('超时从 -1 改为正数后，为已存在任务补建 Timer 并从启用时刻计时', async () => {
   const con = Conveyor(async () => { await sleep(500) })
 
   con.setProcessingTimeout(-1)
@@ -355,11 +355,29 @@ test('超时从 -1 改为正数后生效', async () => {
 
   await vi.advanceTimersByTimeAsync(100)
   con.setProcessingTimeout(200)
-  await vi.advanceTimersByTimeAsync(100)
+  await vi.advanceTimersByTimeAsync(200)
 
   expect(await p).toEqual({ type: 'timeout in processing', elapsed_time: 200 })
 
   await vi.advanceTimersByTimeAsync(500)
+})
+
+test('等待超时从 -1 改为正数后，为排队任务补建 Timer', async () => {
+  const con = Conveyor(async () => { await sleep(100) })
+  con.setValve(1)
+  con.setWaitingTimeout(-1)
+
+  const p1 = con.send(1) // 正在执行
+  const p2 = con.send(2) // 排队中
+
+  await vi.advanceTimersByTimeAsync(10)
+  con.setWaitingTimeout(50)
+  await vi.advanceTimersByTimeAsync(50)
+
+  expect(await p2).toEqual({ type: 'timeout in waiting', elapsed_time: 50 })
+
+  await vi.advanceTimersByTimeAsync(100)
+  await p1
 })
 
 test('超时参数校验：安全整数且 >= -1', async () => {
@@ -444,6 +462,108 @@ test('retireOne：退役正在执行的任务，触发 outside 中断', async ()
   expect(con.getTaskStatus(taskId!)).toBe('retired in processing')
 })
 
+test('retireOne 排队任务会取消 waiting timer', async () => {
+  const con = Conveyor(async () => { await sleep(100) })
+  con.setValve(1)
+  con.setWaitingTimeout(50)
+
+  const p1 = con.send(1) // 正在执行
+  const p2 = con.send(2) // 排队中
+
+  const taskId2 = Conveyor.getTaskIDByPromise(p2)!
+  await vi.advanceTimersByTimeAsync(10)
+  expect(con.retireOne(taskId2)).toEqual({ scene: 'retired' })
+
+  expect(await p2).toEqual({ type: 'retired' })
+
+  // 已经超过原 waiting timeout 时长，但 timer 已被取消，状态不应被改写
+  await vi.advanceTimersByTimeAsync(100)
+  expect(con.getTaskStatus(taskId2)).toBe('retired')
+
+  await p1
+})
+
+test('retireOne 执行中任务会取消 processing timer，终态不被超时覆盖', async () => {
+  const abortFn = vi.fn()
+  const sigProcessed = vi.fn()
+
+  const con = Conveyor(async (_, { abort_signal }) => {
+    abort_signal.receive(abortFn)
+    await sleep(500)
+  })
+
+  con.signals.sig_receiver_processed.receive(sigProcessed)
+  con.setProcessingTimeout(50)
+
+  const p = con.send(1)
+  await vi.advanceTimersByTimeAsync(10)
+
+  const taskId = Conveyor.getTaskIDByPromise(p)!
+  expect(con.retireOne(taskId)).toEqual({ scene: 'in processing' })
+  expect(abortFn).toHaveBeenCalledWith('outside')
+
+  expect(await p).toEqual({ type: 'retired' })
+
+  // 超过 processing timeout 时长后，状态仍应保持 retired in processing
+  await vi.advanceTimersByTimeAsync(100)
+  expect(con.getTaskStatus(taskId)).toBe('retired in processing')
+  expect(abortFn.mock.calls).toEqual([['outside']])
+
+  // receiver 真正结束后仍会释放工位并触发 processed
+  await vi.advanceTimersByTimeAsync(500)
+  expect(sigProcessed).toHaveBeenCalledTimes(1)
+})
+
+test('sig_receiver_will_process 中 destroy：终态后 timer 不再触发', async () => {
+  const sigProcessed = vi.fn()
+  let destroyed = false
+
+  const con = Conveyor(async () => {
+    await sleep(100)
+  })
+
+  con.setProcessingTimeout(50)
+  con.signals.sig_receiver_processed.receive(sigProcessed)
+  con.signals.sig_receiver_will_process.receive(() => {
+    if (!destroyed) {
+      destroyed = true
+      con.destroy()
+    }
+  })
+
+  const p = con.send(1)
+  const taskId = Conveyor.getTaskIDByPromise(p)!
+
+  expect(await p).toEqual({ type: 'destroyed' })
+  expect(con.getTaskStatus(taskId)).toBe('destroyed')
+
+  await vi.advanceTimersByTimeAsync(100)
+
+  expect(con.getTaskStatus(taskId)).toBe('destroyed')
+  expect(sigProcessed).toHaveBeenCalledTimes(1)
+})
+
+test('destroy 排队任务状态为 destroyed，processing 任务结算为 destroyed', async () => {
+  const con = Conveyor(async () => { await sleep(100) })
+
+  const p1 = con.send(1) // 处理中
+  const p2 = con.send(2) // 排队中
+
+  const taskId1 = Conveyor.getTaskIDByPromise(p1)!
+  const taskId2 = Conveyor.getTaskIDByPromise(p2)!
+
+  con.destroy()
+  expect(() => con.destroy()).not.toThrow()
+
+  await expect(p2).rejects.toThrow(ConveyorError)
+  expect(con.getTaskStatus(taskId2)).toBe('destroyed')
+
+  expect(await p1).toEqual({ type: 'destroyed' })
+  expect(con.getTaskStatus(taskId1)).toBe('destroyed')
+
+  await vi.advanceTimersByTimeAsync(100)
+})
+
 test('destroy：摧毁传送带，拒绝所有排队任务并抛出错误', async () => {
   const con = Conveyor(async () => { await sleep(100) })
 
@@ -487,6 +607,45 @@ test('receiver 抛出异常返回 receiver_failure，不污染事件循环', asy
   expect(sigFailure).toHaveBeenCalledTimes(1)
   expect(sigFailure.mock.calls[0][0].task_id).toBeDefined()
   expect(sigFailure.mock.calls[0][0].error).toBe(presetError)
+})
+
+test('receiver 同步抛错会转成 receiver_failure', async () => {
+  const presetError = new Error('sync boom')
+
+  const con = Conveyor<number, void>(() => {
+    throw presetError
+  })
+
+  const p = con.send(1)
+  const taskId = Conveyor.getTaskIDByPromise(p)!
+
+  expect(await p).toEqual({
+    type: 'receiver_failure',
+    error: presetError,
+  })
+  expect(con.getTaskStatus(taskId)).toBe('failure')
+})
+
+test('send 后同步 destroy：同步订阅 abort 的 receiver 能收到中断', async () => {
+  const abortFn = vi.fn()
+  let release!: () => void
+
+  const con = Conveyor(async (_, { abort_signal }) => {
+    abort_signal.receive(abortFn)
+    await new Promise<void>(resolve => {
+      release = resolve
+    })
+  })
+
+  const p = con.send(1)
+
+  con.destroy()
+
+  expect(await p).toEqual({ type: 'destroyed' })
+  expect(abortFn).toHaveBeenCalledWith('destroy')
+
+  release()
+  await vi.advanceTimersByTimeAsync(0)
 })
 
 // ============================================================================
