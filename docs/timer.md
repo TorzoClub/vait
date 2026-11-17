@@ -1,140 +1,119 @@
-# 定时器：Timer / PromiseTimer
+# 定时器：Timer
 
 ```ts
-import { Timer, PromiseTimer } from 'vait'
+import { Timer } from 'vait'
 ```
 
-`vait` 提供两个层次的定时器：
+`Timer` 是一个有状态的单次定时器：通过 `set(ms)` 开始计时，`cancel()` 终止，`countdown()` / `elapsedTime()` 查询进度。
 
-- `Timer(ms, fn)`：最薄的 `setTimeout` 可取消封装，适合一次性的延时回调；
-- `PromiseTimer(initial)`：可动态调整、可挂到 Promise 生命周期上的定时器，适合超时控制；`Conveyor` 的等待 / 处理超时就是用两个 `PromiseTimer` 实现的。
+```ts
+const timer = Timer(Date.now, function onTimeout() {
+  console.log('timeout')
+})
+
+timer.set(1000) // 1000ms 后触发 onTimeout
+```
 
 ---
 
-## Timer
-
-`setTimeout` 的可取消封装。
+## API
 
 ```ts
-const cancel = Timer(1000, () => console.log('1s later'))
-cancel() // 取消，回调不再执行
-```
-
-**API**
-
-| 项 | 说明 |
-| --- | --- |
-| 参数 | `(ms: number, fn: () => void)` |
-| 返回 | `() => void`，调用即取消 |
-| 类型 | `CancelTimer` |
-
-**细节**
-
-- 只执行一次，不重复。
-- 重复调用取消函数是安全的（底层 `clearTimeout` 幂等）。
-- 不对 `ms` 做特殊语义处理：直接透传给 `setTimeout`。
-
----
-
-## PromiseTimer
-
-`PromiseTimer` 是一个「时间配置 + 多个挂载点」的定时器控制器：
-
-- 创建时给一个初始时间；
-- 通过 `setTime` 动态修改时间，修改会作用于所有已挂载的定时器；
-- 通过 `mount(promise, onTimeout)` 把一个 Promise 和超时回调绑定起来；
-- 时间值支持 `-1`（不使用定时器）、`0`（0ms）和正数（毫秒）。
-
-### 快速开始
-
-```ts
-import { PromiseTimer } from 'vait'
-
-const timer = PromiseTimer(1000)
-const controller = new AbortController()
-
-const cancel = timer.mount(
-  fetch('https://example.com/slow', { signal: controller.signal }),
-  elapsed_time => {
-    console.log(`已经过去 ${elapsed_time}ms，取消请求`)
-    controller.abort()
-  },
-)
-
-// 动态调整
-timer.setTime(5000) // 延长
-timer.setTime(0)    // 0ms 后超时
-timer.setTime(-1)   // 关闭定时器（如果已有定时器，取消它）
-
-cancel()            // 手动取消挂载点
-```
-
-### API
-
-```ts
-type CancelTimer = () => void
-
-type PromiseTimer = Readonly<{
-  getTime(): number
-  setTime(t: number): void
-  mount(
-    promise: Promise<unknown>,
-    onTimeout: (elapsed_time: number) => void,
-  ): CancelTimer
+export type Timer = Readonly<{
+  set(ms: number): void
+  cancel(): void
+  countdown(): number
+  elapsedTime(): number
 }>
 
-function PromiseTimer(initial: number): PromiseTimer
+export function Timer(
+  clock: () => number,
+  onTimeout: () => void,
+): Timer
 ```
 
 | 成员 | 说明 |
 | --- | --- |
-| `getTime()` | 返回当前时间配置 |
-| `setTime(t)` | 设置时间；校验通过后立即作用于所有已挂载的定时器 |
-| `mount(promise, onTimeout)` | 挂载一个定时器；返回取消函数。`promise` 结算后会自动取消定时器 |
+| `set(ms)` | 开始或重新设定计时；校验 `ms` 为非负安全整数 |
+| `cancel()` | 取消计时并冻结 `countdown` / `elapsedTime`；之后 `set` 抛错 |
+| `countdown()` | 距离触发还剩多少时间 |
+| `elapsedTime()` | 从第一次 `set` 开始经过的时间 |
 
-### 时间值语义
+`clock` 是时间源，通常传 `Date.now`；测试可以注入假时钟。内部定时器仍使用 `setTimeout`。
 
-| 值 | 含义 |
-| --- | --- |
-| `-1` | 不使用定时器；如果当前有定时器，立即取消，不让它触发 |
-| `0` | 0ms 定时器：用 `setTimeout(fn, 0)` 触发 |
-| 正安全整数 | `ms` 毫秒后触发 |
-| `Infinity` / 小数 / `NaN` | 非法，抛错 |
+---
 
-校验规则（`PromiseTimer(initial)` 与 `setTime` 都适用）：
+## 状态
 
-- 必须是 `Number.isSafeInteger`；
-- 必须 `>= -1`；
-- 非安全整数（含小数、`NaN`、`Infinity`）抛 `TypeError`；
-- 小于 `-1` 的整数抛 `RangeError`。
+| 状态 | 含义 | `countdown()` | `elapsedTime()` |
+| --- | --- | --- | --- |
+| `idle` | 还没有调用 `set` | `Infinity` | `0` |
+| `running` | 正在计时 | 剩余时间 | 已流逝时间 |
+| `canceled` | 调用了 `cancel` | 冻结值 | 冻结值 |
+| `fired` | `onTimeout` 已触发 | `0` | 冻结值 |
 
-非法值不会写入，也不会改变之前的时间配置。
+### set
 
-### mount 与生命周期
+- 第一次调用：记录起点，按 `ms` 挂 `setTimeout`，进入 `running`。
+- 再次调用（`running`）：**保留原起点**，只改总时长；`countdown = ms - 已流逝时间`。
+  - 剩余 `> 0`：重挂定时器；
+  - 剩余 `<= 0`：立即触发 `onTimeout`；
+  - `ms === 0`：重挂 0ms 定时器。
+- `canceled` / `fired` 状态再调用：抛 `Error`。
+- 校验：`Number.isSafeInteger(ms)` 且 `ms >= 0`。负数抛 `RangeError`，小数 / `NaN` / `Infinity` / 超出安全整数范围抛 `TypeError`。
 
-- `mount` 返回一个取消函数；调用后清除当前定时器和内部 watcher。
-- 如果 `promise` 先结算，定时器会自动取消（内部通过 `promise.finally(...)` 清理），不会触发 `onTimeout`。
-- `onTimeout` 只触发一次：触发后会清除定时器和 watcher，之后再调用 `setTime` 不会再次触发该挂载点。
-- `elapsed_time` 是从 `mount` 时刻到实际触发时刻的毫秒数。
-- 初始值为 `-1` 时也会注册时间 watcher，因此之后调用 `setTime(正数)` 或 `setTime(0)` 仍能作用于这个挂载点。
+### cancel
 
-### 动态调整
+- 清掉内部定时器，进入 `canceled`。
+- 冻结 `countdown` 与 `elapsedTime`：
+  - 如果取消前是 `idle`，`countdown` 冻结为 `Infinity`，`elapsedTime` 冻结为 `0`；
+  - 如果取消前是 `running`，冻结取消时刻的剩余时间与已流逝时间。
+- 重复调用 `cancel` 是安全的。
+- 一旦 `cancel`，实例永久失效；之后 `set` 抛错。
 
-`setTime` 会影响该 `PromiseTimer` 上所有仍存活的挂载点：
+### 超时
 
-- 新值为 `-1`：取消当前定时器，不会触发超时；
-- 新值为 `0`：重新挂一个 0ms 定时器；
-- 新值为正数：按「新时间 - 已流逝时间」计算剩余时间；剩余 `> 0` 则重挂，`<= 0` 则立即触发。
+`onTimeout` 只触发一次。触发时：
 
-例如，挂载后已经过了 200ms，再把时间改成 100ms，会立即触发，`elapsed_time` 约为 200。
+- 进入 `fired`；
+- `countdown()` 变为 `0`；
+- `elapsedTime()` 冻结在触发时刻；
+- 之后再调用 `set` 抛错。
+
+---
+
+## 示例
+
+```ts
+const timer = Timer(Date.now, () => {
+  console.log('超时')
+})
+
+console.log(timer.countdown())    // Infinity
+console.log(timer.elapsedTime())  // 0
+
+timer.set(5000)
+
+setTimeout(() => {
+  console.log(timer.countdown())   // 约 3000
+  console.log(timer.elapsedTime()) // 约 2000
+  timer.set(8000)                  // 保留原起点，总时长改为 8000ms
+}, 2000)
+
+timer.cancel()                     // 冻结；此后 set 会抛错
+```
 
 ---
 
 ## 与 Conveyor 的关系
 
-`Conveyor` 内部为等待阶段和处理阶段各维护一个 `PromiseTimer`：
+Conveyor 用 `Timer` 实现等待超时与处理超时，但不总是创建实例：
 
-- `setWaitingTimeout(ms)` → 等待阶段 `PromiseTimer.setTime(ms)`；
-- `setProcessingTimeout(ms)` → 处理阶段 `PromiseTimer.setTime(ms)`。
+- 超时为 `-1`：**不创建 Timer**。
+- 超时为 `0`：创建 Timer 并 `set(0)`。
+- 超时为正数：创建 Timer 并 `set(ms)`。
+- 正数改正数：对已有 Timer 调用 `set(ms)`，保留该任务的原起点。
+- `-1` 改正数：为已存在的任务补建 Timer，并从**启用时刻**开始计时（无法回溯到任务入队/开始时刻）。
+- `retireOne` / `destroy`：取消该任务相关的 waiting / processing Timer。
 
-因此 `Conveyor` 的超时同样使用 `-1`（不启用）/ `0`（0ms）/ 正数（毫秒）的语义。具体配置与任务生命周期见 [任务编排：Conveyor](./conveyor.md)。
+具体超时流程见 [任务编排：Conveyor](./conveyor.md)。

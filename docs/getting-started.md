@@ -61,7 +61,7 @@ import { CreateContext } from './src/deprecated/context' // 已废弃、未从�
 
 ## 命名与设计约定
 
-1. **大写开头的是工厂函数**：`Wait()`、`Queue()`、`Signal()`、`Memo()`、`CreateContext()` 返回对象或元组；`Timer`、`Sequence`、`Concurrent` 直接返回函数。
+1. **大写开头的是工厂函数**：`Wait()`、`Queue()`、`Signal()`、`Memo()`、`CreateContext()` 返回对象或元组；`Timer()` 返回定时器实例；`Sequence`、`Concurrent` 直接返回函数。
 2. **小写开头的是普通函数**：`timeout`、`nextTick`、`runTask`、`concurrency`、`concurrentMap`。
 3. **元组返回值按位置解构**：`const [waiting, go] = Wait()`、`const [get, set] = Memo(0)`、`const [resolve, reject, promise] = OuterPromise()`。
 4. **取消订阅一律返回取消函数**：`Signal.receive`、`Memo.watch`、`Event.on` 等都返回 `() => void`。
@@ -71,7 +71,7 @@ import { CreateContext } from './src/deprecated/context' // 已废弃、未从�
 ## 分模块阅读顺序建议
 
 - 先看 [基础异步原语](./primitives.md) 理解 `Wait` / `timeout`；
-- 需要自定义超时控制时看 [定时器（Timer / PromiseTimer）](./timer.md)；
+- 需要自定义超时控制时看 [定时器（Timer）](./timer.md)；
 - 再看 [串行执行](./sequence.md) 与 [任务队列](./queue.md)，这是最常用的调度工具；
 - 需要限制并发时看 [并发控制](./concurrency.md)；
 - 需要背压、超时、单任务中断或结构化任务结果时看 [任务编排（Conveyor）](./conveyor.md)；
