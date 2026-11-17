@@ -21,7 +21,7 @@
 | [任务队列](./docs/queue.md) | `Queue`、`QueueSignal`、`WithPayload`、`runTask` |
 | [按 ID 的任务池](./docs/queue-pool.md) | `QueuePool` |
 | [并发控制](./docs/concurrency.md) | `concurrency`、`Valve`、`each`、`concurrentMap` |
-| [任务编排（Conveyor）](./docs/conveyor.md) | `Conveyor` 的工作流程、生命周期、超时与退役 |
+| [任务编排（Conveyor）](./docs/conveyor.md) | `Conveyor` 的工作流程、生命周期、状态查询、超时与退役 |
 | [信号](./docs/signal.md) | `Signal` |
 | [可观察状态](./docs/memo.md) | `Memo` |
 | [上下文与事件（已废弃）](./docs/deprecated/context-event.md) | `CreateContext`、`Event`（已移至 `src/deprecated/`，未从入口导出） |
@@ -159,7 +159,7 @@ console.log(result) // [2, 4, 6, 8, 10]
 | concurrent | `Concurrent` | 带并发上限的执行器 |
 | queue（遗留） | `Queue`、`QueueSignal`、`WithPayload`、`runTask` | 任务队列，位于 `src/legacy/` |
 | queue-pool（遗留） | `QueuePool` | 按 ID 分组、组内串行的任务池，位于 `src/legacy/` |
-| conveyor | `Conveyor`、`ConveyorInstance`、`ConveyorSendResult`、`ConveyorError` | 推荐的任务编排：阀门、积压上限、超时、retire |
+| conveyor | `Conveyor`、`ConveyorInstance`、`ConveyorSendResult`、`ConveyorState`、`ConveyorError` | 推荐的任务编排：阀门、积压上限、超时、retire、状态查询 |
 | concurrency | `concurrency`（`.Valve`、`.each`） | 通用并发控制 |
 | concurrent-map | `concurrentMap` | 并发 map，保持结果顺序 |
 | signal | `Signal`（`.once`、`.wait`） | 发布 / 订阅信号 |

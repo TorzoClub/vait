@@ -263,6 +263,43 @@ await con.send(1).catch(err => {
 
 ## 查询与静态工具
 
+### getState()
+
+返回当前 `ConveyorState`。`getState()` 不会被 `WithDestroy` 包装，destroy 之后仍可调用并返回 `destroyed`。
+
+| 状态 | 条件 |
+| --- | --- |
+| `destroyed` | 已调用 `destroy()` |
+| `working/in_paused` | Valve 为 `0`，且仍有 processing 任务 |
+| `paused` | Valve 为 `0`，且没有 processing 任务 |
+| `working/swamped` | Valve > 0，有 processing 任务，且 backlog 已达上限 |
+| `working/controlled` | Valve > 0，有 processing 任务，且 backlog 未满 |
+| `idle` | Valve > 0，且没有 processing 任务 |
+
+状态判断优先级依次为：`destroyed` → `working/in_paused` → `paused` → `working/swamped` → `working/controlled` → `idle`。
+
+```ts
+const state = con.getState()
+
+if (state === 'destroyed') {
+  // 已销毁
+}
+```
+
+### getProcessing()
+
+返回当前占用 processing 工位的任务快照：
+
+```ts
+const processing = con.getProcessing()
+```
+
+- 不包含排队任务。
+- 包含 `retired/in_processing` 中 processor 尚未结束的任务（它们仍占用工位）。
+- 处理超时后立即移除（processor 之后结束不会重新加入）。
+- 返回的是数组快照，不是内部 Set。
+- 与 `getBlacklogs()` 一样被 `WithDestroy` 包装；destroy 后调用会抛 `ConveyorError`。
+
 ### getBlacklogs()
 
 返回当前积压中的任务数组（不包含正在处理的任务）。元素带有内部字段，**只读使用**，不要修改数组或任务对象；返回的是内部数组引用，直接 `push` / `splice` 会破坏内部状态。

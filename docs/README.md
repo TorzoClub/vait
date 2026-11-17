@@ -19,7 +19,7 @@
 | [任务队列（遗留）](./queue.md) | `Queue`、`QueueSignal`、`WithPayload`、`runTask` |
 | [按 ID 的任务池（遗留）](./queue-pool.md) | `QueuePool` |
 | [并发控制](./concurrency.md) | `concurrency`、`concurrency.Valve`、`concurrency.each`、`concurrentMap` |
-| [任务编排（Conveyor）](./conveyor.md) | `Conveyor` 的工作流程、生命周期、超时与退役 |
+| [任务编排（Conveyor）](./conveyor.md) | `Conveyor` 的工作流程、生命周期、状态查询、超时与退役 |
 | [信号](./signal.md) | `Signal`、`Signal.once`、`Signal.wait` |
 | [可观察状态](./memo.md) | `Memo`、`WithValidating`、`ChangedSignal` |
 | [上下文与事件（已废弃）](./deprecated/context-event.md) | `CreateContext`、`Event`（已移至 `src/deprecated/`，未从入口导出） |
@@ -44,7 +44,7 @@
 | `Concurrent` | concurrent | 带并发上限的串行执行器 |
 | `Queue`、`QueueSignal`、`WithPayload`、`runTask`、`QueueError` | legacy/queue | 任务队列（遗留） |
 | `QueuePool` | legacy/queue-pool | 按 ID 分组、组内串行的任务池（遗留） |
-| `Conveyor`、`ConveyorInstance`、`ConveyorSendResult`、`ConveyorError`、`AbortCause`、`TaskStatus`、`RetireResult` | conveyor | 推荐的任务编排：阀门、积压上限、超时、retire |
+| `Conveyor`、`ConveyorInstance`、`ConveyorSendResult`、`ConveyorState`、`ConveyorError`、`AbortCause`、`TaskStatus`、`RetireResult` | conveyor | 推荐的任务编排：阀门、积压上限、超时、retire |
 | `concurrency`（含 `.Valve`、`.each`）、`concurrentMap` | concurrency / concurrent-map | 通用并发控制与并发 map |
 | `Signal`（含 `Signal.once`、`Signal.wait`） | signal | 事件信号 |
 | `Memo`、`MemoError`、`appendTypedFunc`、`WithValidating`、`ChangedSignal` | memo | 可观察值 |
