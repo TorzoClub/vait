@@ -1,11 +1,13 @@
+import { Memo } from './memo'
+
+export type TimerState = 'idle' | 'running' | 'canceled' | 'fired'
+
 export type Timer = Readonly<{
   set(ms: number): void
   cancel(): void
   countdown(): number
   elapsedTime(): number
 }>
-
-type TimerState = 'idle' | 'running' | 'canceled' | 'fired'
 
 function assertTimerDuration(ms: number) {
   if (!Number.isSafeInteger(ms)) {
@@ -19,108 +21,112 @@ export function Timer(
   clock: () => number,
   onTimeout: () => void,
 ): Timer {
-  let state: TimerState = 'idle'
-  let start_time = 0
-  let total_time = 0
-  let timer_handle: ReturnType<typeof setTimeout> | undefined
-  let frozen_elapsed_time = 0
-  let frozen_countdown = Infinity
+  const [getState, setState] = Memo<TimerState>('idle')
+  const [getStartTime, setStartTime] = Memo<number>(0)
+  const [getTotalTime, setTotalTime] = Memo<number>(0)
+  const [getTimerHandle, setTimerHandle] = Memo<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const [getFrozenElapsedTime, setFrozenElapsedTime] = Memo<number>(0)
+  const [getFrozenCountdown, setFrozenCountdown] = Memo<number>(0)
 
-  function elapsedNow() {
-    return clock() - start_time
-  }
+  const calcElapsedTime = () => clock() - getStartTime()
 
-  function countdownNow() {
-    return Math.max(0, total_time - elapsedNow())
-  }
+  const calcCountdown = () => Math.max(0, getTotalTime() - calcElapsedTime())
 
   function clearTimer() {
-    if (timer_handle !== undefined) {
-      clearTimeout(timer_handle)
-      timer_handle = undefined
+    if (getTimerHandle() !== undefined) {
+      clearTimeout(getTimerHandle())
+      setTimerHandle(undefined)
     }
   }
 
   function freeze() {
-    if (state === 'idle') {
-      frozen_elapsed_time = 0
-      frozen_countdown = Infinity
-    } else if (state === 'running') {
-      frozen_elapsed_time = elapsedNow()
-      frozen_countdown = countdownNow()
+    if (getState() === 'idle') {
+      setFrozenElapsedTime(0)
+      setFrozenCountdown(Infinity)
+    } else if (getState() === 'running') {
+      setFrozenElapsedTime(calcElapsedTime())
+      setFrozenCountdown(calcCountdown())
     }
   }
 
   function fire() {
-    if (state !== 'running') { return }
-    freeze()
-    state = 'fired'
-    frozen_countdown = 0
-    onTimeout()
+    if (getState() === 'running') {
+      freeze()
+      setState('fired')
+      setFrozenCountdown(0)
+      onTimeout()
+    }
   }
 
   function schedule(ms: number) {
     clearTimer()
-    timer_handle = setTimeout(fire, ms)
-  }
-
-  function set(ms: number) {
-    assertTimerDuration(ms)
-
-    if (state === 'canceled') {
-      throw new Error('Timer has been canceled')
-    }
-    if (state === 'fired') {
-      throw new Error('Timer has already fired')
-    }
-
-    if (state === 'idle') {
-      state = 'running'
-      start_time = clock()
-      total_time = ms
-      schedule(ms)
-      return
-    }
-
-    // running: keep the original start_time, only change the total duration
-    total_time = ms
-
-    if (ms === 0) {
-      schedule(0)
-      return
-    }
-
-    const remaining_time = ms - elapsedNow()
-    if (remaining_time > 0) {
-      schedule(remaining_time)
-    } else {
-      clearTimer()
-      fire()
-    }
-  }
-
-  function cancel() {
-    if (state === 'canceled' || state === 'fired') { return }
-    freeze()
-    clearTimer()
-    state = 'canceled'
+    setTimerHandle(setTimeout(fire, ms))
   }
 
   return {
-    set,
-    cancel,
+    set(ms: number) {
+      assertTimerDuration(ms)
+
+      switch (getState()) {
+        case 'canceled':
+          throw new Error('Timer has been canceled')
+        case 'fired':
+          throw new Error('Timer has already fired')
+        case 'idle':
+          setState('running')
+          setStartTime(clock())
+          setTotalTime(ms)
+          schedule(ms)
+        default:
+          // running: keep the original start_time, only change the total duration
+          setTotalTime(ms)
+
+          if (ms === 0) {
+            schedule(0)
+          } else {
+            const remaining_time = ms - calcElapsedTime()
+            if (remaining_time > 0) {
+              schedule(remaining_time)
+            } else {
+              clearTimer()
+              fire()
+            }
+          }
+      }
+    },
+    cancel() {
+      if ((getState() !== 'canceled') && (getState() !== 'fired') ) {
+        freeze()
+        clearTimer()
+        setState('canceled')
+      }
+    },
     countdown() {
-      if (state === 'running') { return countdownNow() }
-      if (state === 'canceled') { return frozen_countdown }
-      if (state === 'fired') { return 0 }
-      return Infinity
+      switch (getState()) {
+        case 'running':
+          return calcCountdown()
+        case 'canceled':
+          return getFrozenCountdown()
+        case 'fired':
+          return 0
+        case 'idle':
+          return Infinity
+        default:
+          throw new Error(`unknown state: ${getState()}`)
+      }
     },
     elapsedTime() {
-      if (state === 'running') { return elapsedNow() }
-      if (state === 'canceled' || state === 'fired') {
-        return frozen_elapsed_time
+      switch (getState()) {
+        case 'running':
+          return calcElapsedTime()
+        case 'canceled':
+        case 'fired':
+          return getFrozenElapsedTime()
+        case 'idle':
+          return 0
+        default:
+          throw new Error(`unknown state: ${getState()}`)
       }
-      return 0
     },
   }
 }

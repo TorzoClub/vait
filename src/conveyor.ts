@@ -292,7 +292,7 @@ export function Conveyor<Payload, ReceiverReturn>(
       }
 
       promiseMiddle.then(return_value => {
-        if (task_status_pool.get(task.id) === 'in processing') {
+        if (taskIsProcessing(task.id)) {
           setTaskStatus(task.id, 'done')
           triggerDoneSignal(task.id, {
             type: 'done',
@@ -301,7 +301,7 @@ export function Conveyor<Payload, ReceiverReturn>(
           signals.sig_receiver_done.trigger(task.id)
         }
       }).catch(error => {
-        if (task_status_pool.get(task.id) === 'in processing') {
+        if (taskIsProcessing(task.id)) {
           setTaskStatus(task.id, 'failure')
           triggerDoneSignal(task.id, {
             type: 'receiver_failure',
