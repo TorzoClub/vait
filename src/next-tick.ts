@@ -1,3 +1,3 @@
-export function nextTick() {
+export function nextTick(): Promise<void> {
   return Promise.resolve()
 }
