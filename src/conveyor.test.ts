@@ -43,7 +43,7 @@ test('基础发送与成功流程，并触发所有基础 Signal', async () => {
 
   const result = await sendPromise
 
-  expect(result).toEqual({ type: 'done', return_value: 'processed-A' })
+  expect(result).toEqual({ scene: 'done', return_value: 'processed-A' })
   expect(sigWillProcess).toHaveBeenCalledTimes(1)
   expect(sigDone).toHaveBeenCalledTimes(1)
   expect(sigProcessed).toHaveBeenCalledTimes(1)
@@ -97,7 +97,7 @@ test('setValve(Infinity) 表示不限制并发', async () => {
 
   await vi.advanceTimersByTimeAsync(100)
   const results = await Promise.all(promises)
-  expect(results.every(result => result.type === 'done')).toBe(true)
+  expect(results.every(result => result.scene === 'done')).toBe(true)
 })
 
 test('背压控制：setBacklogsLimit 超过阈值直接返回 overflow', async () => {
@@ -110,7 +110,7 @@ test('背压控制：setBacklogsLimit 超过阈值直接返回 overflow', async 
   const p2 = con.send(2) // 排队中 (长度 1)
   const p3 = con.send(3) // 触发 overflow
 
-  expect(await p3).toEqual({ type: 'overflow' })
+  expect(await p3).toEqual({ scene: 'overflow' })
 
   await vi.advanceTimersByTimeAsync(200)
   await Promise.all([p1, p2])
@@ -159,8 +159,8 @@ test('默认无超时限制：默认值为 -1，不显式 set 时任务永远不
   const result1 = await p1
   const result2 = await p2
 
-  expect(result1.type).toBe('done')
-  expect(result2.type).toBe('done')
+  expect(result1.scene).toBe('done')
+  expect(result2.scene).toBe('done')
 })
 
 test('等待超时：setWaitingTimeout 显式设置后，排队的任务超时', async () => {
@@ -176,7 +176,7 @@ test('等待超时：setWaitingTimeout 显式设置后，排队的任务超时',
   await vi.advanceTimersByTimeAsync(50)
 
   const result2 = await p2
-  expect(result2).toEqual({ type: 'timeout in waiting', elapsed_time: 50 })
+  expect(result2).toEqual({ scene: 'timeout/in_waiting', elapsed_time: 50 })
 
   // 再快进 50ms 让 p1 完成
   await vi.advanceTimersByTimeAsync(50)
@@ -199,7 +199,7 @@ test('处理超时：setProcessingTimeout 显式设置后，执行超时并触�
   await vi.advanceTimersByTimeAsync(30)
 
   const result = await p
-  expect(result).toEqual({ type: 'timeout in processing', elapsed_time: 30 })
+  expect(result).toEqual({ scene: 'timeout/in_processing', elapsed_time: 30 })
   expect(abortFn).toHaveBeenCalledWith('timeout')
 
   // 确保底层的 receiver 之后跑完也不会影响状态
@@ -229,7 +229,7 @@ test('超时动态调整：可以在任务执行中动态修改超时时间', as
   await vi.advanceTimersByTimeAsync(1)
 
   const result = await p
-  expect(result.type).toBe('timeout in processing')
+  expect(result.scene).toBe('timeout/in_processing')
   expect(abortFn).toHaveBeenCalledWith('timeout')
 
   // 确保底层跑完
@@ -257,7 +257,7 @@ test('处理超时只结算一次：超时后再调整超时不会重复扣减�
   const p1 = con.send(1)
   await vi.advanceTimersByTimeAsync(100)
 
-  expect(await p1).toEqual({ type: 'timeout in processing', elapsed_time: 100 })
+  expect(await p1).toEqual({ scene: 'timeout/in_processing', elapsed_time: 100 })
   expect(abortFn).toHaveBeenCalledTimes(1)
 
   // 任务已经超时，但 receiver 还没结束；此时再调小超时不应二次触发超时回调
@@ -290,7 +290,7 @@ test('处理超时 0 表示 0ms', async () => {
   await vi.advanceTimersByTimeAsync(1)
 
   const result = await p
-  expect(result.type).toBe('timeout in processing')
+  expect(result.scene).toBe('timeout/in_processing')
   expect(abortFn).toHaveBeenCalledTimes(1)
 
   await vi.advanceTimersByTimeAsync(1000)
@@ -307,10 +307,10 @@ test('等待超时 0 表示 0ms', async () => {
   await vi.advanceTimersByTimeAsync(1)
 
   const r2 = await p2
-  expect(r2.type).toBe('timeout in waiting')
+  expect(r2.scene).toBe('timeout/in_waiting')
 
   await vi.advanceTimersByTimeAsync(100)
-  expect((await p1).type).toBe('done')
+  expect((await p1).scene).toBe('done')
 })
 
 test('处理超时 -1 会取消已运行的定时器', async () => {
@@ -327,7 +327,7 @@ test('处理超时 -1 会取消已运行的定时器', async () => {
   con.setProcessingTimeout(-1)
   await vi.advanceTimersByTimeAsync(200)
 
-  expect(await p).toEqual({ type: 'done', return_value: undefined })
+  expect(await p).toEqual({ scene: 'done', return_value: undefined })
   expect(abortFn).not.toHaveBeenCalled()
 })
 
@@ -343,7 +343,7 @@ test('等待超时 -1 会取消已运行的定时器', async () => {
   con.setWaitingTimeout(-1)
   await vi.advanceTimersByTimeAsync(200)
 
-  expect(await p2).toEqual({ type: 'done', return_value: undefined })
+  expect(await p2).toEqual({ scene: 'done', return_value: undefined })
   await p1
 })
 
@@ -357,7 +357,7 @@ test('超时从 -1 改为正数后，为已存在任务补建 Timer 并从启用
   con.setProcessingTimeout(200)
   await vi.advanceTimersByTimeAsync(200)
 
-  expect(await p).toEqual({ type: 'timeout in processing', elapsed_time: 200 })
+  expect(await p).toEqual({ scene: 'timeout/in_processing', elapsed_time: 200 })
 
   await vi.advanceTimersByTimeAsync(500)
 })
@@ -374,7 +374,7 @@ test('等待超时从 -1 改为正数后，为排队任务补建 Timer', async (
   con.setWaitingTimeout(50)
   await vi.advanceTimersByTimeAsync(50)
 
-  expect(await p2).toEqual({ type: 'timeout in waiting', elapsed_time: 50 })
+  expect(await p2).toEqual({ scene: 'timeout/in_waiting', elapsed_time: 50 })
 
   await vi.advanceTimersByTimeAsync(100)
   await p1
@@ -402,10 +402,10 @@ test('超时参数校验：安全整数且 >= -1', async () => {
   const p = con.send(1)
   const id = Conveyor.getTaskIDByPromise(p)!
   await vi.advanceTimersByTimeAsync(20)
-  expect(con.getTaskStatus(id)).toBe('in processing')
+  expect(con.getTaskStatus(id)).toBe('processing')
 
   await vi.advanceTimersByTimeAsync(80)
-  expect((await p).type).toBe('timeout in processing')
+  expect((await p).scene).toBe('timeout/in_processing')
 
   await vi.advanceTimersByTimeAsync(500)
 })
@@ -423,14 +423,14 @@ test('retireOne：从队列中精准退役任务', async () => {
 
   const taskId2 = Conveyor.getTaskIDByPromise(p2)
 
-  expect(con.getTaskStatus(taskId2!)).toBe('in blacklogs')
+  expect(con.getTaskStatus(taskId2!)).toBe('waiting')
 
   const retireResult = con.retireOne(taskId2!)
   expect(retireResult).toEqual({ scene: 'retired' })
 
   const result2 = await p2
-  expect(result2).toEqual({ type: 'retired' })
-  expect(con.getTaskStatus(taskId2!)).toBe('retired')
+  expect(result2).toEqual({ scene: 'retired/in_waiting' })
+  expect(con.getTaskStatus(taskId2!)).toBe('retired/in_waiting')
 
   await vi.advanceTimersByTimeAsync(100)
   await p1
@@ -448,18 +448,18 @@ test('retireOne：退役正在执行的任务，触发 outside 中断', async ()
 
   const taskId = Conveyor.getTaskIDByPromise(p)
 
-  expect(con.getTaskStatus(taskId!)).toBe('in processing')
+  expect(con.getTaskStatus(taskId!)).toBe('processing')
 
   const retireResult = con.retireOne(taskId!)
-  expect(retireResult).toEqual({ scene: 'in processing' })
+  expect(retireResult).toEqual({ scene: 'in_processing' })
   expect(abortFn).toHaveBeenCalledWith('outside')
 
   // send() 立即结算为 retired；receiver 仍会继续跑，但其结果会被忽略
-  expect(await p).toEqual({ type: 'retired' })
-  expect(con.getTaskStatus(taskId!)).toBe('retired in processing')
+  expect(await p).toEqual({ scene: 'retired/in_processing' })
+  expect(con.getTaskStatus(taskId!)).toBe('retired/in_processing')
 
   await vi.advanceTimersByTimeAsync(100)
-  expect(con.getTaskStatus(taskId!)).toBe('retired in processing')
+  expect(con.getTaskStatus(taskId!)).toBe('retired/in_processing')
 })
 
 test('retireOne 排队任务会取消 waiting timer', async () => {
@@ -474,11 +474,11 @@ test('retireOne 排队任务会取消 waiting timer', async () => {
   await vi.advanceTimersByTimeAsync(10)
   expect(con.retireOne(taskId2)).toEqual({ scene: 'retired' })
 
-  expect(await p2).toEqual({ type: 'retired' })
+  expect(await p2).toEqual({ scene: 'retired/in_waiting' })
 
   // 已经超过原 waiting timeout 时长，但 timer 已被取消，状态不应被改写
   await vi.advanceTimersByTimeAsync(100)
-  expect(con.getTaskStatus(taskId2)).toBe('retired')
+  expect(con.getTaskStatus(taskId2)).toBe('retired/in_waiting')
 
   await p1
 })
@@ -499,14 +499,14 @@ test('retireOne 执行中任务会取消 processing timer，终态不被超时�
   await vi.advanceTimersByTimeAsync(10)
 
   const taskId = Conveyor.getTaskIDByPromise(p)!
-  expect(con.retireOne(taskId)).toEqual({ scene: 'in processing' })
+  expect(con.retireOne(taskId)).toEqual({ scene: 'in_processing' })
   expect(abortFn).toHaveBeenCalledWith('outside')
 
-  expect(await p).toEqual({ type: 'retired' })
+  expect(await p).toEqual({ scene: 'retired/in_processing' })
 
-  // 超过 processing timeout 时长后，状态仍应保持 retired in processing
+  // 超过 processing timeout 时长后，状态仍应保持 retired/in_processing
   await vi.advanceTimersByTimeAsync(100)
-  expect(con.getTaskStatus(taskId)).toBe('retired in processing')
+  expect(con.getTaskStatus(taskId)).toBe('retired/in_processing')
   expect(abortFn.mock.calls).toEqual([['outside']])
 
   // receiver 真正结束后仍会释放工位并触发 processed
@@ -534,7 +534,7 @@ test('sig_receiver_will_process 中 destroy：终态后 timer 不再触发', asy
   const p = con.send(1)
   const taskId = Conveyor.getTaskIDByPromise(p)!
 
-  expect(await p).toEqual({ type: 'destroyed' })
+  expect(await p).toEqual({ scene: 'destroyed' })
   expect(con.getTaskStatus(taskId)).toBe('destroyed')
 
   await vi.advanceTimersByTimeAsync(100)
@@ -558,7 +558,7 @@ test('destroy 排队任务状态为 destroyed，processing 任务结算为 destr
   await expect(p2).rejects.toThrow(ConveyorError)
   expect(con.getTaskStatus(taskId2)).toBe('destroyed')
 
-  expect(await p1).toEqual({ type: 'destroyed' })
+  expect(await p1).toEqual({ scene: 'destroyed' })
   expect(con.getTaskStatus(taskId1)).toBe('destroyed')
 
   await vi.advanceTimersByTimeAsync(100)
@@ -599,8 +599,8 @@ test('receiver 抛出异常返回 receiver_failure，不污染事件循环', asy
   const p = con.send(1)
   const result = await p
 
-  expect(result.type).toBe('receiver_failure')
-  if (result.type === 'receiver_failure') {
+  expect(result.scene).toBe('receiver_failure')
+  if (result.scene === 'receiver_failure') {
     expect(result.error).toBe(presetError)
   }
 
@@ -620,7 +620,7 @@ test('receiver 同步抛错会转成 receiver_failure', async () => {
   const taskId = Conveyor.getTaskIDByPromise(p)!
 
   expect(await p).toEqual({
-    type: 'receiver_failure',
+    scene: 'receiver_failure',
     error: presetError,
   })
   expect(con.getTaskStatus(taskId)).toBe('failure')
@@ -641,7 +641,7 @@ test('send 后同步 destroy：同步订阅 abort 的 receiver 能收到中断',
 
   con.destroy()
 
-  expect(await p).toEqual({ type: 'destroyed' })
+  expect(await p).toEqual({ scene: 'destroyed' })
   expect(abortFn).toHaveBeenCalledWith('destroy')
 
   release()
@@ -678,7 +678,7 @@ test('retireOneIgnoreProcessing 的各种场景', async () => {
   con.setValve(1)
 
   const fakeId = Symbol('fake_id') as any
-  expect(con.retireOneIgnoreProcessing(fakeId)).toEqual({ scene: 'not found' })
+  expect(con.retireOneIgnoreProcessing(fakeId)).toEqual({ scene: 'not_found' })
 
   const p1 = con.send(1) // 正在执行
   const p2 = con.send(2) // 排队中
@@ -686,12 +686,12 @@ test('retireOneIgnoreProcessing 的各种场景', async () => {
   const taskId1 = Conveyor.getTaskIDByPromise(p1)!
   const taskId2 = Conveyor.getTaskIDByPromise(p2)!
 
-  // 忽略处理中：因为正在跑，所以找不到，直接返回 not found
-  expect(con.retireOneIgnoreProcessing(taskId1)).toEqual({ scene: 'not found' })
+  // 忽略处理中：因为正在跑，所以找不到，直接返回 not_found
+  expect(con.retireOneIgnoreProcessing(taskId1)).toEqual({ scene: 'not_found' })
 
   // 正常退役排队中的
   expect(con.retireOneIgnoreProcessing(taskId2)).toEqual({ scene: 'retired' })
-  expect(await p2).toEqual({ type: 'retired' })
+  expect(await p2).toEqual({ scene: 'retired/in_waiting' })
 
   await vi.advanceTimersByTimeAsync(100)
 })
@@ -707,12 +707,12 @@ test('Valve 设置为 0 时，任务会无限期挂起，直到调整 Valve', as
 
   // 检查状态
   const taskId = Conveyor.getTaskIDByPromise(p)!
-  expect(con.getTaskStatus(taskId)).toBe('in blacklogs')
+  expect(con.getTaskStatus(taskId)).toBe('waiting')
 
   // 打开阀门
   con.setValve(1)
   await vi.advanceTimersByTimeAsync(10)
-  expect(await p).toEqual({ type: 'done', return_value: undefined })
+  expect(await p).toEqual({ scene: 'done', return_value: undefined })
 })
 
 test('Timer 动态缩减：当新的超时时间小于已经流逝的时间时，立刻触发超时', async () => {
@@ -736,7 +736,7 @@ test('Timer 动态缩减：当新的超时时间小于已经流逝的时间时�
   await vi.advanceTimersByTimeAsync(1)
 
   expect(abortFn).toHaveBeenCalledWith('timeout')
-  expect(await p).toEqual({ type: 'timeout in processing', elapsed_time: 200 })
+  expect(await p).toEqual({ scene: 'timeout/in_processing', elapsed_time: 200 })
 
   await vi.advanceTimersByTimeAsync(1000)
 })
@@ -745,7 +745,7 @@ test('Timer 动态缩减：当新的超时时间小于已经流逝的时间时�
 // 7. 覆盖率极致补全 (Edge Cases for Coverage)
 // ============================================================================
 
-test('排队超时定时器触发时，任务如果已被移出队列，应当静默处理 (覆盖 rm_result === "not found" 分支)', async () => {
+test('排队超时定时器触发时，任务如果已被移出队列，应当静默处理 (覆盖 rm_result === "not_found" 分支)', async () => {
   const con = Conveyor(async () => { await sleep(100) })
   con.setValve(1)
   con.setWaitingTimeout(50)
@@ -802,7 +802,7 @@ test('destroy 时，执行中的任务立即结算为 destroyed，receiver 仍�
   con.destroy()
 
   // send() 立即结算为 destroyed，而不是继续等 receiver
-  expect(await p1).toEqual({ type: 'destroyed' })
+  expect(await p1).toEqual({ scene: 'destroyed' })
   expect(con.getTaskStatus(taskId)).toBe('destroyed')
   expect(finished).toBe(false)
 
@@ -835,7 +835,7 @@ test('Timer 的 set 与 unset 边界，以及动态调整的兜底', async () =>
 
   const r2 = await p2
   // 由于它还没开始跑，它应该超时
-  expect(r2.type).toBe('timeout in waiting')
+  expect(r2.scene).toBe('timeout/in_waiting')
 })
 
 // ============================================================================
@@ -868,10 +868,10 @@ test('超时之后，底层的 receiver 才报错，应被拦截且不污染状�
 
   await vi.advanceTimersByTimeAsync(50)
   const res = await p
-  expect(res.type).toBe('timeout in processing')
+  expect(res.scene).toBe('timeout/in_processing')
 
   await vi.advanceTimersByTimeAsync(100)
-  expect(con.getTaskStatus(Conveyor.getTaskIDByPromise(p)!)).toBe('timeout in processing')
+  expect(con.getTaskStatus(Conveyor.getTaskIDByPromise(p)!)).toBe('timeout/in_processing')
 })
 
 test('Timer 动态延长超时时间，覆盖重新挂载 setTimeout 的分支', async () => {
@@ -890,7 +890,7 @@ test('Timer 动态延长超时时间，覆盖重新挂载 setTimeout 的分支',
   await vi.advanceTimersByTimeAsync(50)
 
   const r2 = await p2
-  expect(r2.type).toBe('timeout in waiting')
+  expect(r2.scene).toBe('timeout/in_waiting')
 
   await vi.advanceTimersByTimeAsync(500)
 })

@@ -6,31 +6,31 @@ import { getWeakMapItem, ID, removeItem, weakMapItemIfExist } from "./internal/u
 
 type TaskID = ID<Symbol, 'TaskID'>
 
-export type AbortType = 'destroy' | 'outside' | 'timeout'
+export type AbortCause = 'destroy' | 'outside' | 'timeout'
 
 export type RetireResult =
-  | { scene: 'not found' }
+  | { scene: 'not_found' }
   | { scene: 'retired' }
-  | { scene: 'in processing' }
+  | { scene: 'in_processing' }
 
 export type TaskStatus =
-  | 'in blacklogs'
-  | 'in processing'
+  | 'waiting'
+  | 'processing'
   | 'failure'
   | 'done'
-  | 'retired in processing'
-  | 'retired'
-  | 'timeout in waiting'
-  | 'timeout in processing'
+  | 'retired/in_processing'
+  | 'retired/in_waiting'
+  | 'timeout/in_waiting'
+  | 'timeout/in_processing'
   | 'destroyed'
 
 const TERMINAL_STATUSES: ReadonlySet<TaskStatus> = new Set([
   'failure',
   'done',
-  'retired in processing',
-  'retired',
-  'timeout in waiting',
-  'timeout in processing',
+  'retired/in_processing',
+  'retired/in_waiting',
+  'timeout/in_waiting',
+  'timeout/in_processing',
   'destroyed',
 ])
 
@@ -39,15 +39,16 @@ function isTerminalStatus(status: TaskStatus | undefined) {
 }
 
 export type ConveyorSendResult<ReceiverReturn> =
-  | Readonly<{ type: 'done', return_value: ReceiverReturn }>
-  | Readonly<{ type: 'overflow' }>
-  | Readonly<{ type: 'receiver_failure', error: unknown }>
-  | Readonly<{ type: 'retired' }>
-  | Readonly<{ type: 'timeout in waiting', elapsed_time: number }>
-  | Readonly<{ type: 'timeout in processing', elapsed_time: number }>
-  | Readonly<{ type: 'destroyed' }>
+  | Readonly<{ scene: 'done', return_value: ReceiverReturn }>
+  | Readonly<{ scene: 'overflow' }>
+  | Readonly<{ scene: 'receiver_failure', error: unknown }>
+  | Readonly<{ scene: 'retired/in_waiting' }>
+  | Readonly<{ scene: 'retired/in_processing' }>
+  | Readonly<{ scene: 'timeout/in_waiting', elapsed_time: number }>
+  | Readonly<{ scene: 'timeout/in_processing', elapsed_time: number }>
+  | Readonly<{ scene: 'destroyed' }>
 
-const __overflow_result: Readonly<{ type: 'overflow' }> = Object.freeze({ type: 'overflow' })
+const __overflow_result: Readonly<{ scene: 'overflow' }> = Object.freeze({ scene: 'overflow' })
 
 type ConveyorErrorSource = 'Receiver' | 'Internal'
 
@@ -64,7 +65,7 @@ type Receiver<Payload, ReceiverReturn> = (
   payload: Payload,
   o: {
     id: TaskID,
-    abort_signal: Signal<AbortType>,
+    abort_signal: Signal<AbortCause>,
   }
 ) => Promise<ReceiverReturn>
 
@@ -95,7 +96,7 @@ export type ConveyorInstance<Payload, ReceiverReturn> = {
 
   getBlacklogs(): Task<Payload>[]
   getTaskStatus(id: TaskID): TaskStatus
-  retireOneIgnoreProcessing(id: Task<Payload>['id']): Exclude<RetireResult, { scene: 'in processing' }>
+  retireOneIgnoreProcessing(id: Task<Payload>['id']): Exclude<RetireResult, { scene: 'in_processing' }>
   retireOne(id: Task<Payload>['id']): RetireResult
 
   destroy(): void
@@ -202,7 +203,7 @@ export function Conveyor<Payload, ReceiverReturn>(
 
   const task_status_pool = new WeakMap<TaskID, TaskStatus>()
   function taskIsProcessing(task_id: TaskID) {
-    return 'in processing' === task_status_pool.get(task_id)
+    return 'processing' === task_status_pool.get(task_id)
   }
   function setTaskStatus(task_id: TaskID, status: TaskStatus): TaskStatus {
     const current_status = task_status_pool.get(task_id)
@@ -214,9 +215,9 @@ export function Conveyor<Payload, ReceiverReturn>(
     }
   }
 
-  const task_abort_pool = new WeakMap<TaskID, Signal<AbortType>>()
+  const task_abort_pool = new WeakMap<TaskID, Signal<AbortCause>>()
   function getAbortSignal(task_id: TaskID) {
-    return getWeakMapItem(task_abort_pool, task_id, () => Signal<AbortType>())
+    return getWeakMapItem(task_abort_pool, task_id, () => Signal<AbortCause>())
   }
 
   const [getCurrentProcessing, setCurrentProcessing] = Memo(0)
@@ -247,7 +248,7 @@ export function Conveyor<Payload, ReceiverReturn>(
       const abort_signal = getAbortSignal(task.id)
 
       waitingTimer.stop(task.id)
-      setTaskStatus(task.id, 'in processing')
+      setTaskStatus(task.id, 'processing')
 
       const cancelDestroyedWatcher = Signal.once(sig_destroyed, () => {
         abort_signal.trigger('destroy')
@@ -255,7 +256,7 @@ export function Conveyor<Payload, ReceiverReturn>(
         processingTimer.stop(task.id)
         setTaskStatus(task.id, 'destroyed')
         triggerDoneSignal(task.id, {
-          type: 'destroyed'
+          scene: 'destroyed'
         })
       })
 
@@ -270,9 +271,9 @@ export function Conveyor<Payload, ReceiverReturn>(
           abort_signal.trigger('timeout')
 
           setCurrentProcessing(getCurrentProcessing() - 1)
-          setTaskStatus(task.id, 'timeout in processing')
+          setTaskStatus(task.id, 'timeout/in_processing')
 
-          triggerDoneSignal(task.id, { type: 'timeout in processing', elapsed_time })
+          triggerDoneSignal(task.id, { scene: 'timeout/in_processing', elapsed_time })
 
           startProcessing()
         }
@@ -295,7 +296,7 @@ export function Conveyor<Payload, ReceiverReturn>(
         if (taskIsProcessing(task.id)) {
           setTaskStatus(task.id, 'done')
           triggerDoneSignal(task.id, {
-            type: 'done',
+            scene: 'done',
             return_value
           })
           signals.sig_receiver_done.trigger(task.id)
@@ -304,7 +305,7 @@ export function Conveyor<Payload, ReceiverReturn>(
         if (taskIsProcessing(task.id)) {
           setTaskStatus(task.id, 'failure')
           triggerDoneSignal(task.id, {
-            type: 'receiver_failure',
+            scene: 'receiver_failure',
             error
           })
           signals.sig_receiver_failure.trigger({
@@ -367,7 +368,7 @@ export function Conveyor<Payload, ReceiverReturn>(
         )
       })
 
-      setTaskStatus(task.id, 'in blacklogs')
+      setTaskStatus(task.id, 'waiting')
 
       setTaskIDByPromise(promise, task.id)
 
@@ -377,8 +378,8 @@ export function Conveyor<Payload, ReceiverReturn>(
           if (rm_result === 'removed') {
             cancelDoneWatcher()
             $_cancelDestroyedWatcherInSend()
-            setTaskStatus(task.id, 'timeout in waiting')
-            resolve({ type: 'timeout in waiting', elapsed_time })
+            setTaskStatus(task.id, 'timeout/in_waiting')
+            resolve({ scene: 'timeout/in_waiting', elapsed_time })
           }
         }
       })
@@ -389,27 +390,27 @@ export function Conveyor<Payload, ReceiverReturn>(
     }
   })
 
-  function removeBlacklogTask(will_remove_task_id: TaskID): 'not found' | 'removed' {
+  function removeBlacklogTask(will_remove_task_id: TaskID): 'not_found' | 'removed' {
     const [removed_idx, removed_blacklogs] = removeItem(
       getBlacklogs(),
       task => will_remove_task_id === task.id
     )
     if (removed_idx === -1) {
-      return 'not found'
+      return 'not_found'
     } else {
       setBlacklogs(removed_blacklogs)
       return 'removed'
     }
   }
 
-  function retireOneWithoutProcessing(will_remove_task_id: TaskID): Exclude<RetireResult, { scene: 'in processing' }> {
+  function retireOneWithoutProcessing(will_remove_task_id: TaskID): Exclude<RetireResult, { scene: 'in_processing' }> {
     const rm_result = removeBlacklogTask(will_remove_task_id)
-    if (rm_result === 'not found') {
-      return { scene: 'not found' }
+    if (rm_result === 'not_found') {
+      return { scene: 'not_found' }
     } else {
       waitingTimer.stop(will_remove_task_id)
-      setTaskStatus(will_remove_task_id, 'retired')
-      triggerDoneSignal(will_remove_task_id, { type: 'retired' })
+      setTaskStatus(will_remove_task_id, 'retired/in_waiting')
+      triggerDoneSignal(will_remove_task_id, { scene: 'retired/in_waiting' })
       return { scene: 'retired' }
     }
   }
@@ -462,13 +463,13 @@ export function Conveyor<Payload, ReceiverReturn>(
     retireOneIgnoreProcessing: WithDestroy(retireOneWithoutProcessing),
     retireOne: WithDestroy(will_remove_task_id => {
       const result = retireOneWithoutProcessing(will_remove_task_id)
-      if ((result.scene === 'not found') && taskIsProcessing(will_remove_task_id)) {
+      if ((result.scene === 'not_found') && taskIsProcessing(will_remove_task_id)) {
         waitingTimer.stop(will_remove_task_id)
         processingTimer.stop(will_remove_task_id)
-        setTaskStatus(will_remove_task_id, 'retired in processing')
+        setTaskStatus(will_remove_task_id, 'retired/in_processing')
         getAbortSignal(will_remove_task_id).trigger('outside')
-        triggerDoneSignal(will_remove_task_id, { type: 'retired' })
-        return { scene: 'in processing' }
+        triggerDoneSignal(will_remove_task_id, { scene: 'retired/in_processing' })
+        return { scene: 'in_processing' }
       } else {
         return result
       }
