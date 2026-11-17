@@ -11,6 +11,9 @@ type TypedFunc<
   R
 > = { type: type } & Func<D, R>
 
+// 注意：TypedFunc 会原地修改传入的 fn（用 Object.assign 挂上 type），
+// 不会创建新函数。因此不要把它直接用在需要保留原函数身份/属性的函数上：
+// 例如 Memo.forward 必须先包一层 wrapper，否则会把目标 Memo 的 setter 改标成 after。
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function TypedFunc<T extends FuncType, D, R>(
   type: T,
@@ -124,7 +127,9 @@ Memo.watch = <D>(memo: Memo<D>, changedCallback: (i: D) => void) => {
 
 Memo.forward = <D>(from: Memo<D>, to: MemoLike<D>) => {
   Memo.change(to, Memo.value(from))
-  const cancelForward = Memo.watch(from, Memo.getSetter(to))
+  // 不能直接把目标 setter 传给 Memo.watch：TypedFunc 会原地把它标成 after。
+  // 这里包一层 wrapper，避免污染 to[1] 的 type。
+  const cancelForward = Memo.watch(from, value => Memo.getSetter(to)(value))
   return cancelForward
 }
 
