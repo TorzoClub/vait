@@ -8,12 +8,12 @@ type TaskID = ID<Symbol, 'TaskID'>
 
 export type AbortType = 'destroy' | 'outside' | 'timeout'
 
-type RetireResult =
+export type RetireResult =
   | { scene: 'not found' }
   | { scene: 'retired' }
   | { scene: 'in processing' }
 
-type TaskStatus =
+export type TaskStatus =
   | 'in blacklogs'
   | 'in processing'
   | 'failure'
@@ -31,6 +31,7 @@ export type ConveyorSendResult<ReceiverReturn> =
   | Readonly<{ type: 'retired' }>
   | Readonly<{ type: 'timeout in waiting', elapsed_time: number }>
   | Readonly<{ type: 'timeout in processing', elapsed_time: number }>
+  | Readonly<{ type: 'destroyed' }>
 
 const __overflow_result: Readonly<{ type: 'overflow' }> = Object.freeze({ type: 'overflow' })
 
@@ -224,10 +225,12 @@ export function Conveyor<Payload, ReceiverReturn>(
     for (const task of will_process_tasks) {
       const abort_signal = getAbortSignal(task.id)
 
-
       const cancelDestroyedWatcher = Signal.once(sig_destroyed, () => {
         abort_signal.trigger('destroy')
         setTaskStatus(task.id, 'destroyed')
+        triggerDoneSignal(task.id, {
+          type: 'destroyed'
+        })
       })
       setTaskStatus(task.id, 'in processing')
 
@@ -235,14 +238,13 @@ export function Conveyor<Payload, ReceiverReturn>(
 
       task[sym_hook_willProcess]()
 
-      const promiseMiddle = receiver(task.payload, {
-        id: task.id,
-        abort_signal,
-      })
+      const promiseMiddle = Promise.resolve().then(
+        () => receiver(task.payload, { id: task.id, abort_signal })
+      )
 
       let $is_timeout = false
       const cancelProcessingTimer = processingTimer.mount(promiseMiddle, function processingTimeout(elapsed_time) {
-        // 处理超时只结算一次：先摘除定时器 watcher，
+        // 处理超时只运行一次：先摘除定时器 watcher，
         // 避免之后调用 setProcessingTimeout 时给已超时的任务重新挂载定时器
         cancelProcessingTimer()
         if ($is_timeout) { return }
@@ -260,8 +262,15 @@ export function Conveyor<Payload, ReceiverReturn>(
         startProcessing()
       })
 
+      const cleanCancelProcessingTimerAbortSignal =
+        abort_signal.receive((type) => {
+          if (type === 'destroy') { cancelProcessingTimer() }
+        })
+
       promiseMiddle.then(return_value => {
         if ($is_timeout) { return }
+        const status = task_status_pool.get(task.id)
+        if (status === 'retired in processing' || status === 'destroyed') { return }
         if (task_status_pool.get(task.id) === 'in processing') {
           setTaskStatus(task.id, 'done')
         }
@@ -272,6 +281,8 @@ export function Conveyor<Payload, ReceiverReturn>(
         signals.sig_receiver_done.trigger(task.id)
       }).catch(error => {
         if ($is_timeout) { return }
+        const status = task_status_pool.get(task.id)
+        if (status === 'retired in processing' || status === 'destroyed') { return }
         if (task_status_pool.get(task.id) === 'in processing') {
           setTaskStatus(task.id, 'failure')
         }
@@ -285,7 +296,7 @@ export function Conveyor<Payload, ReceiverReturn>(
         })
       }).finally(() => {
         if ($is_timeout) { return }
-        cancelProcessingTimer()
+        cleanCancelProcessingTimerAbortSignal()
         cancelDestroyedWatcher()
         setCurrentProcessing(getCurrentProcessing() - 1)
         signals.sig_receiver_processed.trigger(task.id)
@@ -342,6 +353,8 @@ export function Conveyor<Payload, ReceiverReturn>(
       const cancelWaitimerWatcher = waitingTimer.mount(promise, function onTimeout(elapsed_time) {
         const rm_result = removeBlacklogTask(task.id)
         if (rm_result === 'removed') {
+          cancelDoneWatcher()
+          $_cancelDestroyedWatcherInSend()
           setTaskStatus(task.id, 'timeout in waiting')
           resolve({ type: 'timeout in waiting', elapsed_time })
         } else {
@@ -394,22 +407,25 @@ export function Conveyor<Payload, ReceiverReturn>(
     setWaitingTimeout: WithDestroy(waitingTimer.setTime),
     setProcessingTimeout: WithDestroy(processingTimer.setTime),
     getBlacklogs: WithDestroy(getBlacklogs),
-    getTaskStatus: WithDestroy(task_id => {
+    getTaskStatus(task_id) {
+      // getTaskStatus 不能被 WithDestroy 包装
+      // 因为预期会有 destroyed 的 TaskStatus
       const task_status = task_status_pool.get(task_id)
       if (task_status === undefined) {
-        throw new ConveyorError('Internal', `Task(${String(task_id)} not found)`, {
+        throw new ConveyorError('Internal', `Task(task_id=${String(task_id)}) not found`, {
           cause: { task_id }
         })
       } else {
         return task_status
       }
-    }),
+    },
     retireOneIgnoreProcessing: WithDestroy(retireOneWithoutProcessing),
     retireOne: WithDestroy(will_remove_task_id => {
       const result = retireOneWithoutProcessing(will_remove_task_id)
       if ((result.scene === 'not found') && taskIsProcessing(will_remove_task_id)) {
         setTaskStatus(will_remove_task_id, 'retired in processing')
         getAbortSignal(will_remove_task_id).trigger('outside')
+        triggerDoneSignal(will_remove_task_id, { type: 'retired' })
         return { scene: 'in processing' }
       } else {
         return result

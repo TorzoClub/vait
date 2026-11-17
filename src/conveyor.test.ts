@@ -436,11 +436,12 @@ test('retireOne：退役正在执行的任务，触发 outside 中断', async ()
   expect(retireResult).toEqual({ scene: 'in processing' })
   expect(abortFn).toHaveBeenCalledWith('outside')
 
-  // 注意：这里因为任务还在跑，按当前设计，它会跑完，但是结果被拦截。
-  // 如果你把上一版的 triggerDoneSignal 拿掉了，这里 p 会悬挂！
-  // 我建议在这里加上 triggerDoneSignal(taskId!, { type: 'retired' }) 以释放调用方。
-  // 在测试里暂时先推进时间。
+  // send() 立即结算为 retired；receiver 仍会继续跑，但其结果会被忽略
+  expect(await p).toEqual({ type: 'retired' })
+  expect(con.getTaskStatus(taskId!)).toBe('retired in processing')
+
   await vi.advanceTimersByTimeAsync(100)
+  expect(con.getTaskStatus(taskId!)).toBe('retired in processing')
 })
 
 test('destroy：摧毁传送带，拒绝所有排队任务并抛出错误', async () => {
@@ -619,10 +620,21 @@ test('当 Queue 为空且触发 startProcessing 时，应直接返回 (覆盖 ta
   expect(true).toBe(true) // 只要不报错就证明安全退出了
 })
 
-test('destroy 时，已经在 processing 的任务不应被排队阶段遗留的 watcher 误杀', async () => {
-  const con = Conveyor(async () => { await sleep(100) })
+test('destroy 时，执行中的任务立即结算为 destroyed，receiver 仍会跑完', async () => {
+  let finished = false
+  const sigDone = vi.fn()
+  const sigProcessed = vi.fn()
+
+  const con = Conveyor(async () => {
+    await sleep(100)
+    finished = true
+  })
+
+  con.signals.sig_receiver_done.receive(sigDone)
+  con.signals.sig_receiver_processed.receive(sigProcessed)
 
   const p1 = con.send(1)
+  const taskId = Conveyor.getTaskIDByPromise(p1)!
 
   // 推进时间，让 p1 进入 processing
   await vi.advanceTimersByTimeAsync(10)
@@ -630,13 +642,17 @@ test('destroy 时，已经在 processing 的任务不应被排队阶段遗留的
   // 此时调用 destroy，p1 的状态是 processing
   con.destroy()
 
-  // 确保 p1 不会被 reject（或者如果你设计为会被中断，则抓住它）
-  // 在之前的修复中，我们通过 sym_hook 移除了排队阶段的 watcher，所以它应该继续跑完
-  await vi.advanceTimersByTimeAsync(100)
+  // send() 立即结算为 destroyed，而不是继续等 receiver
+  expect(await p1).toEqual({ type: 'destroyed' })
+  expect(con.getTaskStatus(taskId)).toBe('destroyed')
+  expect(finished).toBe(false)
 
-  // 这个 expect 可以确保它没有抛出 Unhandled Rejection
-  const result = await p1
-  expect(result.type).toBe('done')
+  // receiver 仍会继续跑完；它的最终结果不再触发 done 信号
+  await vi.advanceTimersByTimeAsync(100)
+  expect(finished).toBe(true)
+  expect(sigDone).not.toHaveBeenCalled()
+  expect(sigProcessed).toHaveBeenCalledTimes(1)
+  expect(con.getTaskStatus(taskId)).toBe('destroyed')
 })
 
 test('Timer 的 set 与 unset 边界，以及动态调整的兜底', async () => {
