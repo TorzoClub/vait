@@ -4,7 +4,7 @@
 
 ## 发布工程与包元数据（P2）
 
-- [ ] `package.json` 增加 `engines`：`"node": ">=22.13"`（与 [安装与调用方式](./docs/getting-started.md) 的环境要求保持一致）。
+- [x] `package.json` 增加 `engines`：`"node": ">=20"`（与 [安装与调用方式](./docs/getting-started.md) 的环境要求保持一致）。
 - [ ] 增加 `exports` 映射：`"."` 的 `import` / `require` / `types` 分别指向 ESM、CJS、声明文件，并验证 Node ESM、Node CJS 与常见 bundler 都能解析。
 - [ ] 用 `types` 字段指向 `./types/index.d.ts`（或明确保留 `typings` 并说明原因），确认 TypeScript 能正确解析。
 - [ ] 增加 `"sideEffects": false`：库本身是纯函数 / 工厂，没有导入副作用。
