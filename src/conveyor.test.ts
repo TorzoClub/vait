@@ -900,3 +900,126 @@ test('setValve的参数检查', () => {
 
   expect(() => con.setValve(1.1)).throw()
 })
+
+// ============================================================================
+// ConveyorState / getProcessing
+// ============================================================================
+
+test('getState：初始 idle，Valve=0 为 paused', () => {
+  const con = Conveyor(async () => {})
+
+  expect(con.getState()).toBe('idle')
+
+  con.setValve(0)
+  expect(con.getState()).toBe('paused')
+
+  con.setValve(1)
+  expect(con.getState()).toBe('idle')
+})
+
+test('getState：processing 中为 working/controlled', async () => {
+  const con = Conveyor(async () => { await sleep(100) })
+  const p = con.send(1)
+
+  expect(con.getState()).toBe('working/controlled')
+  expect(con.getProcessing().map(task => task.payload)).toEqual([1])
+
+  await vi.advanceTimersByTimeAsync(100)
+  await p
+
+  expect(con.getState()).toBe('idle')
+  expect(con.getProcessing()).toEqual([])
+})
+
+test('getState：backlog 满时为 working/swamped', async () => {
+  const con = Conveyor(async () => { await sleep(100) })
+  con.setValve(1)
+  con.setBacklogsLimit(1)
+
+  const p1 = con.send(1)
+  const p2 = con.send(2)
+
+  expect(con.getBlacklogs()).toHaveLength(1)
+  expect(con.getState()).toBe('working/swamped')
+
+  await vi.advanceTimersByTimeAsync(200)
+  await Promise.all([p1, p2])
+})
+
+test('getState：Valve=0 且处理中为 working/in_paused', async () => {
+  const con = Conveyor(async () => { await sleep(100) })
+  const p = con.send(1)
+
+  con.setValve(0)
+  expect(con.getState()).toBe('working/in_paused')
+
+  await vi.advanceTimersByTimeAsync(100)
+  await p
+
+  expect(con.getState()).toBe('paused')
+  expect(con.getProcessing()).toEqual([])
+})
+
+test('getState：destroy 后为 destroyed，getProcessing 抛错', async () => {
+  const con = Conveyor(async () => { await sleep(100) })
+  const p = con.send(1)
+
+  con.destroy()
+
+  expect(con.getState()).toBe('destroyed')
+  expect(() => con.getProcessing()).toThrow(ConveyorError)
+
+  await expect(p).resolves.toEqual({ scene: 'destroyed' })
+  await vi.advanceTimersByTimeAsync(100)
+})
+
+test('getProcessing 只包含 processing 任务', async () => {
+  const con = Conveyor(async () => { await sleep(100) })
+  con.setValve(1)
+
+  const p1 = con.send(1)
+  const p2 = con.send(2)
+
+  expect(con.getProcessing().map(task => task.payload)).toEqual([1])
+
+  await vi.advanceTimersByTimeAsync(100)
+  await p1
+
+  expect(con.getProcessing().map(task => task.payload)).toEqual([2])
+
+  await vi.advanceTimersByTimeAsync(100)
+  await p2
+
+  expect(con.getProcessing()).toEqual([])
+})
+
+test('getProcessing 包含 retired/in_processing 直到 processor 结束', async () => {
+  const con = Conveyor(async () => { await sleep(100) })
+  const p = con.send(1)
+  const taskId = Conveyor.getTaskIDByPromise(p)!
+
+  con.retireOne(taskId)
+
+  expect(await p).toEqual({ scene: 'retired/in_processing' })
+  expect(con.getProcessing().map(task => task.payload)).toEqual([1])
+  expect(con.getState()).toBe('working/controlled')
+
+  await vi.advanceTimersByTimeAsync(100)
+
+  expect(con.getProcessing()).toEqual([])
+  expect(con.getState()).toBe('idle')
+})
+
+test('处理超时后 getProcessing 立即不再包含任务', async () => {
+  const con = Conveyor(async () => { await sleep(1000) })
+  con.setProcessingTimeout(50)
+
+  const p = con.send(1)
+  await vi.advanceTimersByTimeAsync(50)
+
+  expect(await p).toEqual({ scene: 'timeout/in_processing', elapsed_time: 50 })
+  expect(con.getProcessing()).toEqual([])
+  expect(con.getState()).toBe('idle')
+
+  await vi.advanceTimersByTimeAsync(1000)
+})

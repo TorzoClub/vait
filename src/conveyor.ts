@@ -8,6 +8,14 @@ type TaskID = ID<Symbol, 'TaskID'>
 
 export type AbortCause = 'destroy' | 'outside' | 'timeout'
 
+export type ConveyorState =
+  | 'idle'                // 空闲
+  | 'paused'              // 暂停，即 Valve.get() === 0
+  | 'working/controlled'  // 即 isWorking() === true 的情况
+  | 'working/swamped'     // 即 isWorking() === true && isSwamped() === true 的情况
+  | 'working/in_paused'   // 即 isWorking() === true && Valve.get() === 0
+  | 'destroyed'           // 即 isDestroy() === true 的情况
+
 export type RetireResult =
   | { scene: 'not_found' }
   | { scene: 'retired' }
@@ -25,18 +33,14 @@ export type TaskStatus =
   | 'destroyed'
 
 const TERMINAL_STATUSES: ReadonlySet<TaskStatus> = new Set([
-  'failure',
   'done',
+  'failure',
   'retired/in_processing',
   'retired/in_waiting',
   'timeout/in_waiting',
   'timeout/in_processing',
   'destroyed',
 ])
-
-function isTerminalStatus(status: TaskStatus | undefined) {
-  return status !== undefined && TERMINAL_STATUSES.has(status)
-}
 
 export type ConveyorSendResult<ProcessorReturn> =
   | Readonly<{ scene: 'done', return_value: ProcessorReturn }>
@@ -58,6 +62,10 @@ export class ConveyorError extends Error {
     super(msg, opts)
     this.source = source
   }
+}
+
+function isTerminalStatus(status: TaskStatus | undefined) {
+  return status !== undefined && TERMINAL_STATUSES.has(status)
 }
 
 // Processor 函数签名
@@ -92,9 +100,13 @@ export type ConveyorInstance<Payload, ProcessorReturn> = {
   setWaitingTimeout(n: number): void
   setProcessingTimeout(n: number): void
 
+  getState(): ConveyorState
+
   send(payload: Payload): Promise<ConveyorSendResult<ProcessorReturn>>
 
   getBlacklogs(): Task<Payload>[]
+  getProcessing(): Task<Payload>[]
+
   getTaskStatus(id: TaskID): TaskStatus
   retireOneIgnoreProcessing(id: Task<Payload>['id']): Exclude<RetireResult, { scene: 'in_processing' }>
   retireOne(id: Task<Payload>['id']): RetireResult
@@ -220,7 +232,11 @@ export function Conveyor<Payload, ProcessorReturn>(
     return getWeakMapItem(task_abort_pool, task_id, () => Signal<AbortCause>())
   }
 
-  const [getCurrentProcessing, setCurrentProcessing] = Memo(0)
+  const processing_slots = new Set<Task<Payload>>()
+
+  function getProcessing(): Task<Payload>[] {
+    return [...processing_slots]
+  }
 
   function startProcessing() {
     if (isDestroy()) { return }
@@ -230,19 +246,22 @@ export function Conveyor<Payload, ProcessorReturn>(
 
     if (tasks.length === 0) { return }
 
-    const has_available_slots = getCurrentProcessing() < concurrency
-
-    if (!has_available_slots) { return }
+    if (!(processing_slots.size < concurrency)) { return }
 
     const can_start_count = Math.min(
-      concurrency - getCurrentProcessing(),
+      concurrency - processing_slots.size,
       tasks.length
     )
 
-    setCurrentProcessing(getCurrentProcessing() + can_start_count)
+    if (!(can_start_count > 0)) { return }
 
     const will_process_tasks = tasks.slice(0, can_start_count)
     setBlacklogs(tasks.slice(can_start_count))
+
+    // 先占槽位，避免 processor 同步触发 startProcessing 时超发
+    for (const task of will_process_tasks) {
+      processing_slots.add(task)
+    }
 
     for (const task of will_process_tasks) {
       const abort_signal = getAbortSignal(task.id)
@@ -270,7 +289,7 @@ export function Conveyor<Payload, ProcessorReturn>(
 
           abort_signal.trigger('timeout')
 
-          setCurrentProcessing(getCurrentProcessing() - 1)
+          processing_slots.delete(task)
           setTaskStatus(task.id, 'timeout/in_processing')
 
           triggerDoneSignal(task.id, { scene: 'timeout/in_processing', elapsed_time })
@@ -317,7 +336,7 @@ export function Conveyor<Payload, ProcessorReturn>(
         if (!isProcessingTimeout()) {
           processingTimer.stop(task.id)
           cancelDestroyedWatcher()
-          setCurrentProcessing(getCurrentProcessing() - 1)
+          processing_slots.delete(task)
           signals.sig_processor_processed.trigger(task.id)
           startProcessing()
         }
@@ -329,9 +348,32 @@ export function Conveyor<Payload, ProcessorReturn>(
     return getWeakMapItem(task_done_pool, task_id, () => Signal<ConveyorSendResult<ProcessorReturn>>())
   }
 
-  const __internal_send = WithDestroy((payload: Payload) => {
+  function isWorking() {
+    return processing_slots.size > 0
+  }
+
+  function isSwamped() {
+    return getBlacklogs().length >= getBlacklogsLimit()
+  }
+
+  function getState(): ConveyorState {
+    if (isDestroy()) {
+      return 'destroyed'
+    } else {
+      const is_working = isWorking()
+      if (valve.get() === 0) {
+        return is_working ? 'working/in_paused' : 'paused'
+      } else if (is_working) {
+        return isSwamped() ? 'working/swamped' : 'working/controlled'
+      } else {
+        return 'idle'
+      }
+    }
+  }
+
+  const __internalSend = WithDestroy((payload: Payload) => {
     signals.sig_send_before.trigger(payload)
-    if (getBlacklogs().length >= getBlacklogsLimit()) {
+    if (isSwamped()) {
       return Promise.resolve(__overflow_result)
     } else {
       let $_cancelDestroyedWatcherInSend: () => void = () => {}
@@ -425,6 +467,7 @@ export function Conveyor<Payload, ProcessorReturn>(
 
     waitingTimer.clear()
     processingTimer.clear()
+    processing_slots.clear()
 
     setBlacklogs([])
     setDestroy(true)
@@ -441,13 +484,11 @@ export function Conveyor<Payload, ProcessorReturn>(
       assertBacklogsLimit(n)
       setBlacklogsLimit(n)
     }),
-    setWaitingTimeout: WithDestroy(n => {
-      waitingTimer.setTimeout(n)
-    }),
-    setProcessingTimeout: WithDestroy(n => {
-      processingTimer.setTimeout(n)
-    }),
+    setWaitingTimeout: WithDestroy(waitingTimer.setTimeout),
+    setProcessingTimeout: WithDestroy(processingTimer.setTimeout),
     getBlacklogs: WithDestroy(getBlacklogs),
+    getProcessing: WithDestroy(getProcessing),
+    getState,
     getTaskStatus(task_id) {
       // getTaskStatus 不能被 WithDestroy 包装
       // 因为预期会有 destroyed 的 TaskStatus
@@ -477,7 +518,7 @@ export function Conveyor<Payload, ProcessorReturn>(
     destroy: destroyConveyor,
     send(payload) {
       try {
-        return __internal_send(payload)
+        return __internalSend(payload)
       } catch (err) {
         return Promise.reject(err)
       }
