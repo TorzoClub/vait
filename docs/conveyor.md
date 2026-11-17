@@ -93,8 +93,8 @@ send(payload)
    ├── receiver resolve ──────► [done]                 ──► send resolve { done }
    ├── receiver reject ───────► [failure]              ──► send resolve { receiver_failure }
    ├── 处理超时 ──────────────► [timeout in processing] ──► send resolve { timeout in processing }
-   ├── retireOne ─────────────► [retired in processing] ──► send 结果取决于 receiver
-   └── destroy ───────────────► [destroyed]            ──► send 结果取决于 receiver
+   ├── retireOne ─────────────► [retired in processing] ──► send resolve { retired }
+   └── destroy ───────────────► [destroyed]            ──► send resolve { destroyed }
 
 排队中：
   retireOne / retireOneIgnoreProcessing ──► [retired] ──► send resolve { retired }
@@ -120,8 +120,9 @@ send(payload)
 注意：
 
 - `done` / `failure` 只在状态仍是 `in processing` 时写入；如果任务先被退役或销毁，最终状态会保留 `retired in processing` / `destroyed`。
-- `retired in processing` 与 `destroyed` 是「最终结果已不再由 Conveyor 主动改写」的状态：receiver 后续结束也不会把它们改成 `done` / `failure`，但 `send()` 的结果仍会按 receiver 的实际结束方式结算。
+- `retired in processing` 与 `destroyed` 是「最终结果已不再由 Conveyor 主动改写」的状态：receiver 后续结束也不会把它们改成 `done` / `failure`；同时 `send()` 已经在该状态写入时结算为 `retired` / `destroyed`，receiver 的最终返回/异常会被忽略。
 - `destroy` 时仍在排队的任务会被拒绝，但当前实现**不会**把它们的 `getTaskStatus` 改成 `destroyed`，仍停留在 `in blacklogs`。
+- `destroy` 之后仍可调用 `getTaskStatus` 查询执行中任务的 `destroyed` 状态；其他被 `WithDestroy` 包裹的方法仍会抛 `ConveyorError`。
 
 ### send 的结果
 
@@ -132,12 +133,13 @@ send(payload)
 | `done` | receiver 正常返回 | `return_value` |
 | `overflow` | 积压已达上限，任务未入队 | 无 |
 | `receiver_failure` | receiver 抛错 / reject | `error` |
-| `retired` | 排队阶段被退役 | 无 |
+| `retired` | 排队阶段或执行中被退役 | 无 |
+| `destroyed` | 执行中遭遇 `destroy` | 无 |
 | `timeout in waiting` | 排队超时 | `elapsed_time` |
 | `timeout in processing` | 处理超时 | `elapsed_time` |
 
-- **receiver 抛错不会让 `send()` reject**，而是以 `{ type: 'receiver_failure', error }` 返回；这样调用方可以统一用 `switch` 处理。
-- 正常使用下，`send()` 只在 Conveyor 已经销毁时 reject（拒绝值是 `ConveyorError`）。如果 receiver 违反约定**同步**抛出异常（而不是返回 rejected Promise），该异常也会从 `send()` 冒出，并可能让任务停留在 `in processing`；receiver 应始终返回 Promise。
+- **receiver 抛错不会让 `send()` reject**，而是以 `{ type: 'receiver_failure', error }` 返回；这样调用方可以统一用 `switch` 处理。receiver 现在是异步调用的，即使它同步抛错也会被转换成 `receiver_failure`。
+- 正常使用下，`send()` 只在 Conveyor 已经销毁时 reject（拒绝值是 `ConveyorError`）。
 - `overflow` 是同步判断后立即返回的结果，不会创建任务，也不会触发后续 receiver 信号。
 
 ---
@@ -195,7 +197,8 @@ const con = Conveyor(async (url: string, { id, abort_signal }) => {
 
 - `abort_signal` 是**通知**，不是强制取消。Conveyor 不会替你终止 receiver，也不会等待 receiver 响应；receiver 需要自己监听并尽快结束。
 - 只对执行中的任务触发；排队阶段的任务被退役 / 超时时不会调用 receiver，因此也没有中断信号。
-- 处理超时后，receiver 的最终结果会被忽略；销毁后，执行中的 receiver 仍会继续运行，其最终结果会用于结算 `send()`，但不会把状态从 `destroyed` 改回 `done` / `failure`。
+- 处理超时后，receiver 的最终结果会被忽略。销毁后，receiver 仍会继续运行，但它的最终结果不再用于结算 `send()`（此时 `send()` 已经返回 `destroyed`）。
+- `abort_signal` **不会重放**。如果 `destroy()` / `retireOne()` 在 receiver 订阅之前发生（例如 `send()` 之后同步调用），receiver 可能收不到中断，但仍会启动并运行；`send()` 仍按 `destroyed` / `retired` 结算。需要确保 receiver 收到中断时，应避免在它订阅前同步触发销毁/退役。
 
 ---
 
@@ -208,10 +211,10 @@ const con = Conveyor(async (url: string, { id, abort_signal }) => {
 | 任务位置 | 返回值 | 效果 |
 | --- | --- | --- |
 | 积压中 | `{ scene: 'retired' }` | 移出积压，状态 `retired`，`send` 以 `{ type: 'retired' }` 结算 |
-| 执行中 | `{ scene: 'in processing' }` | 状态 `retired in processing`，触发 `'outside'` 中断 |
+| 执行中 | `{ scene: 'in processing' }` | 状态 `retired in processing`，触发 `'outside'` 中断，`send` 立即以 `{ type: 'retired' }` 结算 |
 | 不存在 | `{ scene: 'not found' }` | 无效果 |
 
-**执行中退役的注意点**：`retireOne` 不会把 `send()` 结算成 `retired`。receiver 之后正常返回就得到 `done`，抛错就得到 `receiver_failure`；如果 receiver 完全无视中断且永不结束，`send()` 会一直挂起。需要「可等待的退役结果」时，请在业务侧用 abort 信号自行结束 receiver，并显式返回一个约定值。
+**执行中退役的注意点**：`retireOne` 会立即把 `send()` 结算成 `retired`，但 receiver 仍会继续运行；之后 receiver 的返回或异常会被忽略，不会触发 `sig_receiver_done` / `sig_receiver_failure`，只在 receiver 真正结束时触发 `sig_receiver_processed`。`retireOne` **不会取消处理超时定时器**：如果 receiver 超过处理超时，状态会被改写为 `timeout in processing`，但 `send()` 已经是 `retired`（详见「已知边界」）。
 
 ### retireOneIgnoreProcessing(id)
 
@@ -221,9 +224,9 @@ const con = Conveyor(async (url: string, { id, abort_signal }) => {
 
 销毁整个 Conveyor：
 
-- 排队中的任务：`send()` 以 `ConveyorError` 拒绝，任务不会执行。
-- 执行中的任务：收到 `'destroy'` 中断，状态置为 `destroyed`，但 receiver 会继续运行到结束；`send()` 的结果由 receiver 最终如何结束决定（`done` / `receiver_failure`）。
-- 销毁后：`send` 返回 rejected Promise；`setValve` / `setBacklogsLimit` / 两个超时 setter / `getBlacklogs` / `getTaskStatus` / `retireOne*` 都会同步抛出 `ConveyorError`；`signals` 仍可访问。
+- 排队中的任务：`send()` 以 `ConveyorError` 拒绝，任务不会执行；这些任务的状态仍可能停留在 `in blacklogs`。
+- 执行中的任务：收到 `'destroy'` 中断，处理超时定时器会被取消，状态置为 `destroyed`；`send()` 立即以 `{ type: 'destroyed' }` 结算，但 receiver 会继续运行到结束，其最终结果被忽略。
+- 销毁后：`send` 返回 rejected Promise；`setValve` / `setBacklogsLimit` / 两个超时 setter / `getBlacklogs` / `retireOne*` 都会同步抛出 `ConveyorError`；`getTaskStatus` 仍可调用，用于查询 `destroyed` 状态；`signals` 仍可访问。
 - 销毁不可逆。若还需要继续投递任务，请新建一个 Conveyor。
 
 ```ts
@@ -243,15 +246,15 @@ await con.send(1).catch(err => {
 | --- | --- | --- |
 | `sig_send_before` | `payload` | 每次 `send` 进入内部流程后、积压检查前；溢出时也会触发 |
 | `sig_receiver_will_process` | `TaskID` | 任务出队、调用 receiver 前 |
-| `sig_receiver_done` | `TaskID` | receiver 正常 resolve（包括已被退役 / 已销毁但 receiver 最终成功的情况） |
-| `sig_receiver_failure` | `{ task_id, error }` | receiver 抛错 / reject（处理超时后的 reject 会被忽略） |
+| `sig_receiver_done` | `TaskID` | receiver 正常 resolve，且任务没有被退役、销毁或处理超时 |
+| `sig_receiver_failure` | `{ task_id, error }` | receiver 抛错 / reject，且任务没有被退役、销毁或处理超时 |
 | `sig_receiver_processed` | `TaskID` | 任务结束后的 `finally` 中，且**不是处理超时**路径 |
 
 不在上述时机的场景：
 
 - 排队退役、等待超时、`destroy` 掉排队任务：只结算 `send()`（前两者 resolve，`destroy` 为 reject），不会触发 `sig_receiver_processed`。
 - 处理超时：不会触发 `sig_receiver_processed`，也不会触发 `sig_receiver_failure`（即使 receiver 之后抛错）。
-- 执行中退役 / 销毁：等 receiver 真正结束后，按成功或失败触发 `sig_receiver_done` / `sig_receiver_failure`，并触发 `sig_receiver_processed`。
+- 执行中退役 / 销毁：`send()` 已在退役/销毁时结算；receiver 后续的 resolve / reject 会被忽略，不会触发 `sig_receiver_done` / `sig_receiver_failure`，但 receiver 真正结束时仍会触发 `sig_receiver_processed`。
 
 > `Signal` 的通用语义：同步触发、按注册顺序执行；`trigger` 会吞掉监听器异常并 `console.warn`，需要抛出时用 `triggerCareError`。详见 [信号](./signal.md)。
 
@@ -265,7 +268,7 @@ await con.send(1).catch(err => {
 
 ### getTaskStatus(id)
 
-返回任务状态；未知 ID 抛 `ConveyorError`。任务结束后仍可查询，用于确认最终状态。
+返回任务状态；未知 ID 抛 `ConveyorError`。任务结束后仍可查询，用于确认最终状态；`destroy` 之后也可以调用，用于查询执行中任务的 `destroyed` 状态。
 
 ### Conveyor.getTaskIDByPromise(promise)
 
@@ -295,7 +298,8 @@ const result = await promise
 - `setBacklogsLimit(0)` 会让所有 `send` 溢出，即使当前没有任务在执行。
 - `getBlacklogs()` 返回内部数组引用，外部修改会破坏队列；需要快照请自行 `[...con.getBlacklogs()]`。
 - `destroy` 后，排队任务的状态仍可能显示为 `in blacklogs`（当前实现不会改写为 `destroyed`）。
-- 执行中 `retireOne` 不结算 `send()` 为 `retired`，详见上文。
+- 执行中 `retireOne` 会立即把 `send()` 结算为 `retired`，但不会取消处理超时定时器；如果 receiver 超过处理超时，`getTaskStatus` 会变成 `timeout in processing`，而 `send()` 仍是 `retired`。
+- `abort_signal` 不会重放；在 receiver 订阅之前同步调用 `destroy` / `retireOne`，receiver 可能错过中断（但仍会启动）。
 - 超时配置是 Conveyor 级别的，会同时影响该实例上所有已挂载的定时器。
 
 ---
