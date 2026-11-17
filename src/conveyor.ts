@@ -38,10 +38,10 @@ function isTerminalStatus(status: TaskStatus | undefined) {
   return status !== undefined && TERMINAL_STATUSES.has(status)
 }
 
-export type ConveyorSendResult<ReceiverReturn> =
-  | Readonly<{ scene: 'done', return_value: ReceiverReturn }>
+export type ConveyorSendResult<ProcessorReturn> =
+  | Readonly<{ scene: 'done', return_value: ProcessorReturn }>
   | Readonly<{ scene: 'overflow' }>
-  | Readonly<{ scene: 'receiver_failure', error: unknown }>
+  | Readonly<{ scene: 'processor_failure', error: unknown }>
   | Readonly<{ scene: 'retired/in_waiting' }>
   | Readonly<{ scene: 'retired/in_processing' }>
   | Readonly<{ scene: 'timeout/in_waiting', elapsed_time: number }>
@@ -50,7 +50,7 @@ export type ConveyorSendResult<ReceiverReturn> =
 
 const __overflow_result: Readonly<{ scene: 'overflow' }> = Object.freeze({ scene: 'overflow' })
 
-type ConveyorErrorSource = 'Receiver' | 'Internal'
+type ConveyorErrorSource = 'Processor' | 'Internal'
 
 export class ConveyorError extends Error {
   source: ConveyorErrorSource
@@ -60,21 +60,21 @@ export class ConveyorError extends Error {
   }
 }
 
-// Receiver 函数签名
-type Receiver<Payload, ReceiverReturn> = (
+// Processor 函数签名
+type Processor<Payload, ProcessorReturn> = (
   payload: Payload,
   o: {
     id: TaskID,
     abort_signal: Signal<AbortCause>,
   }
-) => Promise<ReceiverReturn>
+) => Promise<ProcessorReturn>
 
 type ConveyorSignals<Payload> = {
-  sig_receiver_failure: Signal<{ task_id: TaskID, error: unknown }>
-  sig_receiver_will_process: Signal<TaskID>
-  sig_receiver_processed: Signal<TaskID>
+  sig_processor_failure: Signal<{ task_id: TaskID, error: unknown }>
+  sig_processor_will_process: Signal<TaskID>
+  sig_processor_processed: Signal<TaskID>
   sig_send_before: Signal<Payload>
-  sig_receiver_done: Signal<TaskID>
+  sig_processor_done: Signal<TaskID>
 }
 
 const sym_hook_willProcess = Symbol('sym_hook_willProcess')
@@ -86,13 +86,13 @@ type Task<Payload> = {
   [sym_hook_willProcess]: () => void
 }
 
-export type ConveyorInstance<Payload, ReceiverReturn> = {
+export type ConveyorInstance<Payload, ProcessorReturn> = {
   setValve(n: number): void
   setBacklogsLimit(n: number): void
   setWaitingTimeout(n: number): void
   setProcessingTimeout(n: number): void
 
-  send(payload: Payload): Promise<ConveyorSendResult<ReceiverReturn>>
+  send(payload: Payload): Promise<ConveyorSendResult<ProcessorReturn>>
 
   getBlacklogs(): Task<Payload>[]
   getTaskStatus(id: TaskID): TaskStatus
@@ -165,9 +165,9 @@ function setTaskIDByPromise(promise: Promise<any>, task_id: TaskID) {
 }
 Conveyor.getTaskIDByPromise = getTaskIDByPromise
 
-export function Conveyor<Payload, ReceiverReturn>(
-  receiver: Receiver<Payload, ReceiverReturn>
-): ConveyorInstance<Payload, ReceiverReturn> {
+export function Conveyor<Payload, ProcessorReturn>(
+  processor: Processor<Payload, ProcessorReturn>
+): ConveyorInstance<Payload, ProcessorReturn> {
   const destroyMemo = Memo(false)
   const sig_destroyed = Signal()
   Memo.watch(destroyMemo, d => {
@@ -179,11 +179,11 @@ export function Conveyor<Payload, ReceiverReturn>(
   })
 
   const signals: ConveyorSignals<Payload> = {
-    sig_receiver_failure: Signal<{ task_id: TaskID, error: unknown }>(),
-    sig_receiver_will_process: Signal<TaskID>(),
-    sig_receiver_processed: Signal<TaskID>(),
+    sig_processor_failure: Signal<{ task_id: TaskID, error: unknown }>(),
+    sig_processor_will_process: Signal<TaskID>(),
+    sig_processor_processed: Signal<TaskID>(),
     sig_send_before: Signal<Payload>(),
-    sig_receiver_done: Signal<TaskID>(),
+    sig_processor_done: Signal<TaskID>(),
   }
 
   const waitingTimer = ConveyorTimer<TaskID>()
@@ -194,8 +194,8 @@ export function Conveyor<Payload, ReceiverReturn>(
   const blacklogsMemo = Memo<Task<Payload>[]>([])
   const [getBlacklogs, setBlacklogs] = blacklogsMemo
 
-  const task_done_pool = new WeakMap<TaskID, Signal<ConveyorSendResult<ReceiverReturn>>>()
-  function triggerDoneSignal(task_id: TaskID, result: ConveyorSendResult<ReceiverReturn>) {
+  const task_done_pool = new WeakMap<TaskID, Signal<ConveyorSendResult<ProcessorReturn>>>()
+  function triggerDoneSignal(task_id: TaskID, result: ConveyorSendResult<ProcessorReturn>) {
     weakMapItemIfExist(task_done_pool, task_id, done_signal => {
       done_signal.trigger(result)
     })
@@ -281,12 +281,12 @@ export function Conveyor<Payload, ReceiverReturn>(
 
       task[sym_hook_willProcess]()
 
-      signals.sig_receiver_will_process.trigger(task.id)
+      signals.sig_processor_will_process.trigger(task.id)
 
-      let promiseMiddle: Promise<ReceiverReturn>
+      let promiseMiddle: Promise<ProcessorReturn>
       try {
         promiseMiddle = Promise.resolve(
-          receiver(task.payload, { id: task.id, abort_signal })
+          processor(task.payload, { id: task.id, abort_signal })
         )
       } catch (error) {
         promiseMiddle = Promise.reject(error)
@@ -299,16 +299,16 @@ export function Conveyor<Payload, ReceiverReturn>(
             scene: 'done',
             return_value
           })
-          signals.sig_receiver_done.trigger(task.id)
+          signals.sig_processor_done.trigger(task.id)
         }
       }).catch(error => {
         if (taskIsProcessing(task.id)) {
           setTaskStatus(task.id, 'failure')
           triggerDoneSignal(task.id, {
-            scene: 'receiver_failure',
+            scene: 'processor_failure',
             error
           })
-          signals.sig_receiver_failure.trigger({
+          signals.sig_processor_failure.trigger({
             task_id: task.id,
             error,
           })
@@ -318,7 +318,7 @@ export function Conveyor<Payload, ReceiverReturn>(
           processingTimer.stop(task.id)
           cancelDestroyedWatcher()
           setCurrentProcessing(getCurrentProcessing() - 1)
-          signals.sig_receiver_processed.trigger(task.id)
+          signals.sig_processor_processed.trigger(task.id)
           startProcessing()
         }
       })
@@ -326,7 +326,7 @@ export function Conveyor<Payload, ReceiverReturn>(
   }
 
   function getDoneSignal(task_id: TaskID) {
-    return getWeakMapItem(task_done_pool, task_id, () => Signal<ConveyorSendResult<ReceiverReturn>>())
+    return getWeakMapItem(task_done_pool, task_id, () => Signal<ConveyorSendResult<ProcessorReturn>>())
   }
 
   const __internal_send = WithDestroy((payload: Payload) => {
@@ -346,7 +346,7 @@ export function Conveyor<Payload, ReceiverReturn>(
 
       const done_signal = getDoneSignal(task.id)
 
-      const [resolve, reject, promise] = OuterPromise<ConveyorSendResult<ReceiverReturn>>()
+      const [resolve, reject, promise] = OuterPromise<ConveyorSendResult<ProcessorReturn>>()
 
       setBlacklogs([...getBlacklogs(), task])
 

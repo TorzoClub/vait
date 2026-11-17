@@ -30,15 +30,15 @@ test('基础发送与成功流程，并触发所有基础 Signal', async () => {
   })
 
   con.signals.sig_send_before.receive(sigSendBefore)
-  con.signals.sig_receiver_will_process.receive(sigWillProcess)
-  con.signals.sig_receiver_done.receive(sigDone)
-  con.signals.sig_receiver_processed.receive(sigProcessed)
+  con.signals.sig_processor_will_process.receive(sigWillProcess)
+  con.signals.sig_processor_done.receive(sigDone)
+  con.signals.sig_processor_processed.receive(sigProcessed)
 
   const sendPromise = con.send('A')
 
   expect(sigSendBefore).toHaveBeenCalledWith('A')
 
-  // 推进时间，让 receiver 执行完毕
+  // 推进时间，让 processor 执行完毕
   await vi.advanceTimersByTimeAsync(100)
 
   const result = await sendPromise
@@ -202,7 +202,7 @@ test('处理超时：setProcessingTimeout 显式设置后，执行超时并触�
   expect(result).toEqual({ scene: 'timeout/in_processing', elapsed_time: 30 })
   expect(abortFn).toHaveBeenCalledWith('timeout')
 
-  // 确保底层的 receiver 之后跑完也不会影响状态
+  // 确保底层的 processor 之后跑完也不会影响状态
   await vi.advanceTimersByTimeAsync(100)
 })
 
@@ -260,7 +260,7 @@ test('处理超时只结算一次：超时后再调整超时不会重复扣减�
   expect(await p1).toEqual({ scene: 'timeout/in_processing', elapsed_time: 100 })
   expect(abortFn).toHaveBeenCalledTimes(1)
 
-  // 任务已经超时，但 receiver 还没结束；此时再调小超时不应二次触发超时回调
+  // 任务已经超时，但 processor 还没结束；此时再调小超时不应二次触发超时回调
   con.setProcessingTimeout(50)
   await vi.advanceTimersByTimeAsync(1)
   expect(abortFn).toHaveBeenCalledTimes(1)
@@ -273,7 +273,7 @@ test('处理超时只结算一次：超时后再调整超时不会重复扣减�
   expect(started).toEqual([1, 2])
   expect(maxActive).toBe(2)
 
-  // 收尾：让 receiver 全部结束
+  // 收尾：让 processor 全部结束
   await vi.advanceTimersByTimeAsync(3000)
 })
 
@@ -454,7 +454,7 @@ test('retireOne：退役正在执行的任务，触发 outside 中断', async ()
   expect(retireResult).toEqual({ scene: 'in_processing' })
   expect(abortFn).toHaveBeenCalledWith('outside')
 
-  // send() 立即结算为 retired；receiver 仍会继续跑，但其结果会被忽略
+  // send() 立即结算为 retired；processor 仍会继续跑，但其结果会被忽略
   expect(await p).toEqual({ scene: 'retired/in_processing' })
   expect(con.getTaskStatus(taskId!)).toBe('retired/in_processing')
 
@@ -492,7 +492,7 @@ test('retireOne 执行中任务会取消 processing timer，终态不被超时�
     await sleep(500)
   })
 
-  con.signals.sig_receiver_processed.receive(sigProcessed)
+  con.signals.sig_processor_processed.receive(sigProcessed)
   con.setProcessingTimeout(50)
 
   const p = con.send(1)
@@ -509,12 +509,12 @@ test('retireOne 执行中任务会取消 processing timer，终态不被超时�
   expect(con.getTaskStatus(taskId)).toBe('retired/in_processing')
   expect(abortFn.mock.calls).toEqual([['outside']])
 
-  // receiver 真正结束后仍会释放工位并触发 processed
+  // processor 真正结束后仍会释放工位并触发 processed
   await vi.advanceTimersByTimeAsync(500)
   expect(sigProcessed).toHaveBeenCalledTimes(1)
 })
 
-test('sig_receiver_will_process 中 destroy：终态后 timer 不再触发', async () => {
+test('sig_processor_will_process 中 destroy：终态后 timer 不再触发', async () => {
   const sigProcessed = vi.fn()
   let destroyed = false
 
@@ -523,8 +523,8 @@ test('sig_receiver_will_process 中 destroy：终态后 timer 不再触发', asy
   })
 
   con.setProcessingTimeout(50)
-  con.signals.sig_receiver_processed.receive(sigProcessed)
-  con.signals.sig_receiver_will_process.receive(() => {
+  con.signals.sig_processor_processed.receive(sigProcessed)
+  con.signals.sig_processor_will_process.receive(() => {
     if (!destroyed) {
       destroyed = true
       con.destroy()
@@ -586,7 +586,7 @@ test('destroy：摧毁传送带，拒绝所有排队任务并抛出错误', asyn
 // 5. 异常捕获
 // ============================================================================
 
-test('receiver 抛出异常返回 receiver_failure，不污染事件循环', async () => {
+test('processor 抛出异常返回 processor_failure，不污染事件循环', async () => {
   const sigFailure = vi.fn()
   const presetError = new Error('boom')
 
@@ -594,13 +594,13 @@ test('receiver 抛出异常返回 receiver_failure，不污染事件循环', asy
     throw presetError
   })
 
-  con.signals.sig_receiver_failure.receive(sigFailure)
+  con.signals.sig_processor_failure.receive(sigFailure)
 
   const p = con.send(1)
   const result = await p
 
-  expect(result.scene).toBe('receiver_failure')
-  if (result.scene === 'receiver_failure') {
+  expect(result.scene).toBe('processor_failure')
+  if (result.scene === 'processor_failure') {
     expect(result.error).toBe(presetError)
   }
 
@@ -609,7 +609,7 @@ test('receiver 抛出异常返回 receiver_failure，不污染事件循环', asy
   expect(sigFailure.mock.calls[0][0].error).toBe(presetError)
 })
 
-test('receiver 同步抛错会转成 receiver_failure', async () => {
+test('processor 同步抛错会转成 processor_failure', async () => {
   const presetError = new Error('sync boom')
 
   const con = Conveyor<number, void>(() => {
@@ -620,13 +620,13 @@ test('receiver 同步抛错会转成 receiver_failure', async () => {
   const taskId = Conveyor.getTaskIDByPromise(p)!
 
   expect(await p).toEqual({
-    scene: 'receiver_failure',
+    scene: 'processor_failure',
     error: presetError,
   })
   expect(con.getTaskStatus(taskId)).toBe('failure')
 })
 
-test('send 后同步 destroy：同步订阅 abort 的 receiver 能收到中断', async () => {
+test('send 后同步 destroy：同步订阅 abort 的 processor 能收到中断', async () => {
   const abortFn = vi.fn()
   let release!: () => void
 
@@ -779,7 +779,7 @@ test('当 Queue 为空且触发 startProcessing 时，应直接返回 (覆盖 ta
   expect(true).toBe(true) // 只要不报错就证明安全退出了
 })
 
-test('destroy 时，执行中的任务立即结算为 destroyed，receiver 仍会跑完', async () => {
+test('destroy 时，执行中的任务立即结算为 destroyed，processor 仍会跑完', async () => {
   let finished = false
   const sigDone = vi.fn()
   const sigProcessed = vi.fn()
@@ -789,8 +789,8 @@ test('destroy 时，执行中的任务立即结算为 destroyed，receiver 仍�
     finished = true
   })
 
-  con.signals.sig_receiver_done.receive(sigDone)
-  con.signals.sig_receiver_processed.receive(sigProcessed)
+  con.signals.sig_processor_done.receive(sigDone)
+  con.signals.sig_processor_processed.receive(sigProcessed)
 
   const p1 = con.send(1)
   const taskId = Conveyor.getTaskIDByPromise(p1)!
@@ -801,12 +801,12 @@ test('destroy 时，执行中的任务立即结算为 destroyed，receiver 仍�
   // 此时调用 destroy，p1 的状态是 processing
   con.destroy()
 
-  // send() 立即结算为 destroyed，而不是继续等 receiver
+  // send() 立即结算为 destroyed，而不是继续等 processor
   expect(await p1).toEqual({ scene: 'destroyed' })
   expect(con.getTaskStatus(taskId)).toBe('destroyed')
   expect(finished).toBe(false)
 
-  // receiver 仍会继续跑完；它的最终结果不再触发 done 信号
+  // processor 仍会继续跑完；它的最终结果不再触发 done 信号
   await vi.advanceTimersByTimeAsync(100)
   expect(finished).toBe(true)
   expect(sigDone).not.toHaveBeenCalled()
@@ -855,7 +855,7 @@ test('Valve 设置非法的并发值会触发校验报错', () => {
   expect(() => con.setValve(Infinity)).not.toThrow()
 })
 
-test('超时之后，底层的 receiver 才报错，应被拦截且不污染状态', async () => {
+test('超时之后，底层的 processor 才报错，应被拦截且不污染状态', async () => {
   const con = Conveyor(async () => {
     await sleep(100)
     // 👇 修改点：用 return Promise.reject 代替 throw
