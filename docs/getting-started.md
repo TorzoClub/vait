@@ -2,8 +2,8 @@
 
 ## 环境要求
 
-- 构建 / 测试需要 Node.js ≥ 22.13（CI 使用 Node 24）
-- 支持 Promise 的运行时；打包产物面向 ECMAScript 2020+
+- 构建 / 测试需要 Node.js ≥ 20（CI 使用 Node 24）
+- 支持 Promise 的运行时；打包产物面向 ECMAScript 2023+
 - TypeScript 7 用于类型检查与声明生成；由于 typescript-eslint 尚未支持 TypeScript 7，ESLint 目前只检查 JavaScript 文件
 - 自带 TypeScript 类型声明（`types/index.d.ts`）
 

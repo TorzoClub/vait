@@ -41,7 +41,7 @@
 | `timeout`、`rejectTimeout`、`TimeoutRejected` | timeout | 延时等待，可被外部取消 |
 | `nextTick` | next-tick | 一个微任务 tick |
 | `Sequence` | sequence | 串行执行器 |
-| `Concurrent` | concurrent | 带并发上限的串行执行器 |
+| `Concurrent` | concurrent | 带并发上限的执行器 |
 | `Queue`、`QueueSignal`、`WithPayload`、`runTask`、`QueueError` | legacy/queue | 任务队列（遗留） |
 | `QueuePool` | legacy/queue-pool | 按 ID 分组、组内串行的任务池（遗留） |
 | `Conveyor`、`ConveyorInstance`、`ConveyorSendResult`、`ConveyorState`、`ConveyorError`、`AbortCause`、`TaskStatus`、`RetireResult` | conveyor | 推荐的任务编排：阀门、积压上限、超时、retire |

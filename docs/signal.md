@@ -47,7 +47,7 @@ sig.triggerCareError() // 抛 SignalError，后续监听器不再执行
 - `trigger` 会跳过出错的监听器继续执行其余监听器，并通过 `console.warn` 提示。
 - `triggerCareError` 遇到第一个错误即抛出 `SignalError`，停止后续监听器。
 
-> `SignalError` 未从包入口导出；如需精确判断类型，可从源码路径 `./signal` 引入，或读取 `err.name / err.cause`。
+> `SignalError` 未从包入口导出；如需精确判断类型，可从源码路径 `./signal` 引入并用 `instanceof` 判断，或检查 `err.constructor.name === 'SignalError'`。注意 `err.name` 仍是 `"Error"`，不能用来识别；`err.cause` 是监听器抛出的原始错误。
 
 ---
 

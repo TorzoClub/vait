@@ -127,7 +127,7 @@ getValidated() // 10（不跟随）
 
 这是有意设计：校验层只保证“经过它的写入”合法，不拦截绕过它的写入。
 
-- `WithValidating` 会先用当前值校验一次；不通过直接抛错。
+- `WithValidating` 会在构造时用当前值校验；不通过直接抛错。成功构造时校验器实际会调用两次（`WithValidating` 先校验一次，`Memo.addValidator` 注册时再立即校验一次）。
 - 校验失败时原值不变，`validated` 的值也不变。
 
 ---
@@ -151,7 +151,7 @@ Memo.change(source, 7) // source 变为 7，但 watching 仍是 5，信号不触
 - 返回 `[watchingMemo, receive]`。
 - 通过 `watchingMemo` 写入：既更新 `source`，也触发信号。
 - 直接改 `source`：不会反映到 `watchingMemo`，也不触发信号（单向转发 `watching → source`）。
-- 在信号回调里再次写 `watchingMemo` 会因递归设值抛 `MemoError`。
+- 在信号回调里再次写 `watchingMemo` 会因递归设值抛 `SignalError`，其 `cause` 是 `MemoError("can't setData in hooks")`。
 
 > 换句话说，`ChangedSignal` 更适合“作为可观察的写入代理”，而不是“监听外部对 Memo 的改动”。想监听任意改动请直接用 `Memo.watch`。
 

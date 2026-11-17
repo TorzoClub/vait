@@ -29,7 +29,7 @@ await concurrency(3, [1, 2, 3, 4, 5][Symbol.iterator](), async (item, idx) => {
 **细节**
 
 - 第一个任务在下次调用时**同步启动**（不会先等一个 tick）。
-- 并发上限为 `Infinity` 时表示不限制；为 `0` 时可创建后通过阀门再放开。
+- 并发上限为 `Infinity` 时表示不限制；直接传数字 `0` 会暂停派发且无法再放开（内部阀门不可访问）；若需要之后恢复，请改用 `concurrency.Valve(0)` 并保留该阀门引用。
 - 错误采用“**首个错误向外抛出**”语义：
 
 ```ts
@@ -110,7 +110,7 @@ console.log(result) // ['0:a', '1:b', '2:c']
 
 | 项 | 说明 |
 | --- | --- |
-| 参数 | 与 `concurrency` 一致，回调签名为 `(item, idx, total)` |
+| 参数 | `(valve, list, asyncFn)`；`list` 是数组，回调签名为 `(item, idx, list)`（第三参是原数组） |
 | 返回 | `Promise<NT[]>`，索引与输入一一对应 |
 | 空数组 | 立即 resolve `[]` |
 | 错误 | 任一回调失败，整体 reject（原因即第一个错误） |
@@ -132,12 +132,12 @@ const output = await concurrentMap(5, inputList, async (item, idx, list) => {
 | 消费任意可迭代对象 | `concurrency` |
 | 运行中动态调整并发上限 | `concurrency.Valve` + `concurrency` / `concurrentMap` |
 | 需要队列语义（暂停、丢弃、信号、payload） | `Queue` / `QueuePool` |
-| 需要任务按加入顺序串行 | `Sequence` / `Concurrent` |
+| 需要任务严格按加入顺序串行 | `Sequence`（或 `Concurrent(1)`） |
 
 ---
 
 ## 与 Queue 的区别
 
-- `concurrency` 是“一次性消费一个迭代器 / 数组”，适合批量数据处理。
+- `concurrency` 一次性消费一个迭代器；数组请使用 `concurrency.each` 或 `concurrentMap`。
 - `Queue` 是可长期存在、可不断投递、可暂停 / 丢弃 / 携带 payload 的队列。
 - 两者都支持运行时调整并发；`concurrency` 通过 `Valve`，`Queue` 通过 `setMaxConcurrent`。

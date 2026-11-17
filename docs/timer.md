@@ -98,9 +98,8 @@ setTimeout(() => {
   console.log(timer.countdown())   // 约 3000
   console.log(timer.elapsedTime()) // 约 2000
   timer.set(8000)                  // 保留原起点，总时长改为 8000ms
+  timer.cancel()                   // 冻结；此后 set 会抛错
 }, 2000)
-
-timer.cancel()                     // 冻结；此后 set 会抛错
 ```
 
 ---
