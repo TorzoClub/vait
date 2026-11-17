@@ -8,7 +8,7 @@ import { Conveyor } from 'vait'
 
 与遗留的 `Queue` 不同，`Conveyor` 不是一个可长期持有、自带 `pause` / payload 映射的队列，而是一个**带背压、超时、中断与结构化结果的任务编排器**：
 
-- `send(payload)` 直接返回该任务的结果 Promise（`done` / `overflow` / `receiver_failure` / `retired` / 两种 timeout）；
+- `send(payload)` 直接返回该任务的结果 Promise（`done` / `overflow` / `receiver_failure` / `retired/in_waiting` / `retired/in_processing` / 两种 timeout）；
 - 每个任务都有独立状态、独立中断信号，可按 ID 查询或退役；
 - 支持积压上限（背压）、等待超时与处理超时；
 - 默认串行（阀门为 1），通过 `setValve` 放大并发。
@@ -30,12 +30,12 @@ con.setValve(3) // 最多 3 个任务同时处理
 const results = await Promise.all([1, 2, 3, 4].map(n => con.send(n)))
 
 for (const result of results) {
-  if (result.type === 'done') {
+  if (result.scene === 'done') {
     console.log('结果:', result.return_value)
-  } else if (result.type === 'overflow') {
+  } else if (result.scene === 'overflow') {
     console.warn('积压已满，任务被丢弃')
   } else {
-    console.warn('任务未成功:', result.type)
+    console.warn('任务未成功:', result.scene)
   }
 }
 ```
@@ -48,8 +48,8 @@ for (const result of results) {
 | --- | --- | --- | --- |
 | 阀门（并发上限） | `1` | `setValve(n)` | 同时处理的任务数；默认串行；`Infinity` 表示不限制 |
 | 积压上限 | `Infinity` | `setBacklogsLimit(n)` | 排队任务数达到上限后，新的 `send` 直接返回 `overflow`；`Infinity` 表示无限积压 |
-| 等待超时 | `-1`（不启用） | `setWaitingTimeout(ms)` | 任务在积压中等待超过 `ms` 后以 `timeout in waiting` 结束；`0` 表示 0ms |
-| 处理超时 | `-1`（不启用） | `setProcessingTimeout(ms)` | receiver 执行超过 `ms` 后以 `timeout in processing` 结束，并触发 `timeout` 中断；`0` 表示 0ms |
+| 等待超时 | `-1`（不启用） | `setWaitingTimeout(ms)` | 任务在积压中等待超过 `ms` 后以 `timeout/in_waiting` 结束；`0` 表示 0ms |
+| 处理超时 | `-1`（不启用） | `setProcessingTimeout(ms)` | receiver 执行超过 `ms` 后以 `timeout/in_processing` 结束，并触发 `timeout` 中断；`0` 表示 0ms |
 
 - `setValve` 接受**非负整数或 `Infinity`**：负整数抛 `RangeError`；非整数（包括小数、`NaN`）抛 `TypeError`；`Infinity` 表示不限制并发。设为 `0` 会暂停派发新任务（已在执行的任务不受影响），之后再调大即可继续。
 - 积压上限接受**非负整数或 `Infinity`**：负整数抛 `RangeError`；小数、`NaN` 抛 `TypeError`；`Infinity` 表示无限积压（只受内存限制）。积压上限只统计**排队中**的任务，不包含正在处理的任务；检查发生在任务入队之前（`当前积压数 >= limit` 即溢出），因此 `setBacklogsLimit(0)` 会让所有 `send` 都返回 `overflow`，即使当前有空闲工位。
@@ -63,11 +63,11 @@ for (const result of results) {
 一次 `send` 的完整流程如下：
 
 1. **入口与前置信号**：`send(payload)` 先经过销毁守卫，然后触发 `signals.sig_send_before`。
-2. **背压检查**：当前积压数 `>=` 积压上限时，立即返回 `{ type: 'overflow' }`，不创建任务。
-3. **创建任务**：分配 Symbol 作为 TaskID，记录 payload，创建结果通道（done signal），把任务放入积压，状态置为 `in blacklogs`。
-4. **挂等待超时**：如果启用了等待超时，为这个任务挂一个定时器；超时后把它从积压移除并以 `timeout in waiting` 结算。
+2. **背压检查**：当前积压数 `>=` 积压上限时，立即返回 `{ scene: 'overflow' }`，不创建任务。
+3. **创建任务**：分配 Symbol 作为 TaskID，记录 payload，创建结果通道（done signal），把任务放入积压，状态置为 `waiting`。
+4. **挂等待超时**：如果启用了等待超时，为这个任务挂一个定时器；超时后把它从积压移除并以 `timeout/in_waiting` 结算。
 5. **调度**：调用内部 `startProcessing`。只要有空闲工位且有积压，就按阀值取出任务：
-   - 状态置为 `in processing`；
+   - 状态置为 `processing`；
    - 触发 `sig_receiver_will_process`；
    - 调用 `receiver(payload, { id, abort_signal })`；
    - 挂处理超时。
@@ -82,22 +82,22 @@ for (const result of results) {
 ```
 send(payload)
    │  sig_send_before
-   │  积压满？ ──是──► { type: 'overflow' }
+   │  积压满？ ──是──► { scene: 'overflow' }
    ▼
-[in blacklogs] ──等待超时──► [timeout in waiting] ──► send resolve
+[waiting] ──等待超时──► [timeout/in_waiting] ──► send resolve
    │
    │  出队（有空闲工位）
    │  sig_receiver_will_process
    ▼
-[in processing]
+[processing]
    ├── receiver resolve ──────► [done]                 ──► send resolve { done }
    ├── receiver reject ───────► [failure]              ──► send resolve { receiver_failure }
-   ├── 处理超时 ──────────────► [timeout in processing] ──► send resolve { timeout in processing }
-   ├── retireOne ─────────────► [retired in processing] ──► send resolve { retired }
+   ├── 处理超时 ──────────────► [timeout/in_processing] ──► send resolve { timeout/in_processing }
+   ├── retireOne ─────────────► [retired/in_processing] ──► send resolve { retired/in_processing }
    └── destroy ───────────────► [destroyed]            ──► send resolve { destroyed }
 
 排队中：
-  retireOne / retireOneIgnoreProcessing ──► [retired] ──► send resolve { retired }
+  retireOne / retireOneIgnoreProcessing ──► [retired/in_waiting] ──► send resolve { retired/in_waiting }
   destroy ───────────────────────────────► send reject（ConveyorError）
 ```
 
@@ -107,20 +107,20 @@ send(payload)
 
 | 状态 | 含义 | 何时进入 |
 | --- | --- | --- |
-| `in blacklogs` | 在积压中排队，尚未开始 | `send` 成功创建任务后 |
-| `in processing` | receiver 正在执行 | 出队后、调用 receiver 前 |
-| `done` | receiver 正常返回 | receiver resolve，且状态仍为 `in processing` |
-| `failure` | receiver 抛错 / reject | receiver reject，且状态仍为 `in processing` |
-| `timeout in waiting` | 排队阶段超时，已移出积压 | 等待超时触发且任务仍在积压 |
-| `timeout in processing` | 执行阶段超时 | 处理超时触发 |
-| `retired` | 排队阶段被主动退役 | `retireOne` / `retireOneIgnoreProcessing` 移出积压 |
-| `retired in processing` | 执行中被退役，receiver 仍在运行 | 对执行中任务调用 `retireOne` |
+| `waiting` | 在积压中排队，尚未开始 | `send` 成功创建任务后 |
+| `processing` | receiver 正在执行 | 出队后、调用 receiver 前 |
+| `done` | receiver 正常返回 | receiver resolve，且状态仍为 `processing` |
+| `failure` | receiver 抛错 / reject | receiver reject，且状态仍为 `processing` |
+| `timeout/in_waiting` | 排队阶段超时，已移出积压 | 等待超时触发且任务仍在积压 |
+| `timeout/in_processing` | 执行阶段超时 | 处理超时触发 |
+| `retired/in_waiting` | 排队阶段被主动退役 | `retireOne` / `retireOneIgnoreProcessing` 移出积压 |
+| `retired/in_processing` | 执行中被退役，receiver 仍在运行 | 对执行中任务调用 `retireOne` |
 | `destroyed` | 排队中或执行中遭遇 `destroy` | `destroy` 时仍在排队或处理的任务 |
 
 注意：
 
-- 终态集合：`failure`、`done`、`retired in processing`、`retired`、`timeout in waiting`、`timeout in processing`、`destroyed`。一旦进入终态，**状态不会再被任何路径改写**。
-- `retired in processing` 与 `destroyed` 是终态，但 receiver 可能仍在运行；receiver 后续的返回/异常会被忽略，不会再改状态或触发 `sig_receiver_done` / `sig_receiver_failure`。
+- 终态集合：`failure`、`done`、`retired/in_processing`、`retired/in_waiting`、`timeout/in_waiting`、`timeout/in_processing`、`destroyed`。一旦进入终态，**状态不会再被任何路径改写**。
+- `retired/in_processing` 与 `destroyed` 是终态，但 receiver 可能仍在运行；receiver 后续的返回/异常会被忽略，不会再改状态或触发 `sig_receiver_done` / `sig_receiver_failure`。
 - `destroy` 时仍在排队的任务会被拒绝，状态置为 `destroyed`，并清空 backlog。
 - `destroy` 之后仍可调用 `getTaskStatus` 查询终态；其他被 `WithDestroy` 包裹的方法仍会抛 `ConveyorError`。
 
@@ -128,17 +128,18 @@ send(payload)
 
 `send` 返回 `Promise<ConveyorSendResult<ReceiverReturn>>`，结果是一个可判别联合：
 
-| `type` | 场景 | 附加字段 |
+| `scene` | 场景 | 附加字段 |
 | --- | --- | --- |
 | `done` | receiver 正常返回 | `return_value` |
 | `overflow` | 积压已达上限，任务未入队 | 无 |
 | `receiver_failure` | receiver 抛错 / reject | `error` |
-| `retired` | 排队阶段或执行中被退役 | 无 |
+| `retired/in_waiting` | 排队阶段被退役 | 无 |
+| `retired/in_processing` | 执行中被退役 | 无 |
 | `destroyed` | 执行中遭遇 `destroy` | 无 |
-| `timeout in waiting` | 排队超时 | `elapsed_time` |
-| `timeout in processing` | 处理超时 | `elapsed_time` |
+| `timeout/in_waiting` | 排队超时 | `elapsed_time` |
+| `timeout/in_processing` | 处理超时 | `elapsed_time` |
 
-- **receiver 抛错不会让 `send()` reject**，而是以 `{ type: 'receiver_failure', error }` 返回；这样调用方可以统一用 `switch` 处理。receiver 是同步调用的，即使它同步抛错也会被转换成 `receiver_failure`。
+- **receiver 抛错不会让 `send()` reject**，而是以 `{ scene: 'receiver_failure', error }` 返回；这样调用方可以统一用 `switch` 处理。receiver 是同步调用的，即使它同步抛错也会被转换成 `receiver_failure`。
 - 正常使用下，`send()` 只在 Conveyor 已经销毁时 reject（拒绝值是 `ConveyorError`）。
 - `overflow` 是同步判断后立即返回的结果，不会创建任务，也不会触发后续 receiver 信号。
 
@@ -148,13 +149,13 @@ send(payload)
 
 ### 等待超时（`setWaitingTimeout`）
 
-- 任务在积压中等待超过配置时长后，移除 backlog，状态置为 `timeout in waiting`，`send` 以 `{ type: 'timeout in waiting', elapsed_time }` 结算。
+- 任务在积压中等待超过配置时长后，移除 backlog，状态置为 `timeout/in_waiting`，`send` 以 `{ scene: 'timeout/in_waiting', elapsed_time }` 结算。
 - 超时为 `-1` 时**不创建 Timer**；之后改成正数或 `0`，会为已存在的排队任务补建 Timer，并从启用时刻开始计时。
 - 任务开始处理时，waiting Timer 会被取消并删除。
 
 ### 处理超时（`setProcessingTimeout`）
 
-- 任务开始处理时，如果处理超时 `>= 0`，创建 Timer；触发时触发 `abort_signal` 的 `'timeout'`，状态置为 `timeout in processing`，`send` 以 `{ type: 'timeout in processing', elapsed_time }` 结算，并腾出并发工位继续调度。
+- 任务开始处理时，如果处理超时 `>= 0`，创建 Timer；触发时触发 `abort_signal` 的 `'timeout'`，状态置为 `timeout/in_processing`，`send` 以 `{ scene: 'timeout/in_processing', elapsed_time }` 结算，并腾出并发工位继续调度。
 - 超时为 `-1` 时**不创建 Timer**；之后改成正数或 `0`，会为正在处理的任务补建 Timer，并从启用时刻开始计时。
 - 处理超时后，receiver 后续的 resolve / reject 都会被忽略，不会改写状态或再次结算。
 - Timer 只触发一次；触发后会进入 `fired` 状态，不能再次 `set`。
@@ -210,22 +211,22 @@ const con = Conveyor(async (url: string, { id, abort_signal }) => {
 
 | 任务位置 | 返回值 | 效果 |
 | --- | --- | --- |
-| 积压中 | `{ scene: 'retired' }` | 移出积压，状态 `retired`，`send` 以 `{ type: 'retired' }` 结算 |
-| 执行中 | `{ scene: 'in processing' }` | 状态 `retired in processing`，触发 `'outside'` 中断，`send` 立即以 `{ type: 'retired' }` 结算 |
-| 不存在 | `{ scene: 'not found' }` | 无效果 |
+| 积压中 | `{ scene: 'retired' }` | 移出积压，状态 `retired/in_waiting`，`send` 以 `{ scene: 'retired/in_waiting' }` 结算 |
+| 执行中 | `{ scene: 'in_processing' }` | 状态 `retired/in_processing`，触发 `'outside'` 中断，`send` 立即以 `{ scene: 'retired/in_processing' }` 结算 |
+| 不存在 | `{ scene: 'not_found' }` | 无效果 |
 
-**执行中退役的注意点**：`retireOne` 会取消该任务的 waiting 与 processing Timer，立即把 `send()` 结算成 `retired`，状态写为 `retired in processing`（终态）。receiver 仍会继续运行，之后它的返回或异常会被忽略，不会触发 `sig_receiver_done` / `sig_receiver_failure`，只在 receiver 真正结束时触发 `sig_receiver_processed`。由于 Timer 已取消，处理超时不会再触发或覆盖状态；但如果 receiver 永不结束，该任务的并发工位会一直被占用。
+**执行中退役的注意点**：`retireOne` 会取消该任务的 waiting 与 processing Timer，立即把 `send()` 结算成 `retired/in_processing`，状态写为 `retired/in_processing`（终态）。receiver 仍会继续运行，之后它的返回或异常会被忽略，不会触发 `sig_receiver_done` / `sig_receiver_failure`，只在 receiver 真正结束时触发 `sig_receiver_processed`。由于 Timer 已取消，处理超时不会再触发或覆盖状态；但如果 receiver 永不结束，该任务的并发工位会一直被占用。
 
 ### retireOneIgnoreProcessing(id)
 
-只退役积压中的任务；对执行中的任务返回 `{ scene: 'not found' }`，不会发中断、不会改状态。
+只退役积压中的任务；对执行中的任务返回 `{ scene: 'not_found' }`，不会发中断、不会改状态。
 
 ### destroy()
 
 销毁整个 Conveyor：
 
 - 排队中的任务：取消 waiting Timer，状态置为 `destroyed`，从 backlog 移除；`send()` 以 `ConveyorError` 拒绝。
-- 执行中的任务：取消 processing / waiting Timer，收到 `'destroy'` 中断，状态置为 `destroyed`；`send()` 立即以 `{ type: 'destroyed' }` 结算，但 receiver 会继续运行到结束，其最终结果被忽略。
+- 执行中的任务：取消 processing / waiting Timer，收到 `'destroy'` 中断，状态置为 `destroyed`；`send()` 立即以 `{ scene: 'destroyed' }` 结算，但 receiver 会继续运行到结束，其最终结果被忽略。
 - 销毁后：`send` 返回 rejected Promise；`setValve` / `setBacklogsLimit` / 两个超时 setter / `getBlacklogs` / `retireOne*` 都会同步抛出 `ConveyorError`；`getTaskStatus` 仍可调用，用于查询 `destroyed` 状态；`signals` 仍可访问。
 - 销毁不可逆。若还需要继续投递任务，请新建一个 Conveyor。
 
@@ -337,7 +338,7 @@ const results = await Promise.all(
 )
 
 const data = results.flatMap(result => (
-  result.type === 'done' ? [result.return_value] : []
+  result.scene === 'done' ? [result.return_value] : []
 ))
 ```
 
@@ -354,20 +355,20 @@ con.setWaitingTimeout(5_000)
 
 for (const job of jobs) {
   con.send(job).then(result => {
-    switch (result.type) {
+    switch (result.scene) {
       case 'done':
         break
       case 'overflow':
         console.warn('排队已满，丢弃任务')
         break
-      case 'timeout in waiting':
+      case 'timeout/in_waiting':
         console.warn(`排队 ${result.elapsed_time}ms 后超时`)
         break
       case 'receiver_failure':
         console.error('任务失败', result.error)
         break
       default:
-        console.warn('任务未完成:', result.type)
+        console.warn('任务未完成:', result.scene)
     }
   })
 }
@@ -388,7 +389,7 @@ con.setValve(3)
 con.setProcessingTimeout(3_000)
 
 const result = await con.send('https://example.com/slow')
-if (result.type === 'timeout in processing') {
+if (result.scene === 'timeout/in_processing') {
   console.warn(`处理超过 ${result.elapsed_time}ms，已中断`)
 }
 ```
@@ -407,10 +408,10 @@ const second = con.send(taskB)
 
 const secondId = Conveyor.getTaskIDByPromise(second)
 if (secondId !== undefined) {
-  console.log(con.getTaskStatus(secondId)) // in blacklogs
+  console.log(con.getTaskStatus(secondId)) // waiting
   console.log(con.retireOne(secondId))     // { scene: 'retired' }
 }
 
-console.log(await second) // { type: 'retired' }
+console.log(await second) // { scene: 'retired/in_waiting' }
 await first
 ```

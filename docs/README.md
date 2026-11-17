@@ -44,7 +44,7 @@
 | `Concurrent` | concurrent | 带并发上限的串行执行器 |
 | `Queue`、`QueueSignal`、`WithPayload`、`runTask`、`QueueError` | legacy/queue | 任务队列（遗留） |
 | `QueuePool` | legacy/queue-pool | 按 ID 分组、组内串行的任务池（遗留） |
-| `Conveyor`、`ConveyorInstance`、`ConveyorSendResult`、`ConveyorError`、`AbortType` | conveyor | 推荐的任务编排：阀门、积压上限、超时、retire |
+| `Conveyor`、`ConveyorInstance`、`ConveyorSendResult`、`ConveyorError`、`AbortCause`、`TaskStatus`、`RetireResult` | conveyor | 推荐的任务编排：阀门、积压上限、超时、retire |
 | `concurrency`（含 `.Valve`、`.each`）、`concurrentMap` | concurrency / concurrent-map | 通用并发控制与并发 map |
 | `Signal`（含 `Signal.once`、`Signal.wait`） | signal | 事件信号 |
 | `Memo`、`MemoError`、`appendTypedFunc`、`WithValidating`、`ChangedSignal` | memo | 可观察值 |
