@@ -77,6 +77,7 @@ export function Timer(
           setStartTime(clock())
           setTotalTime(ms)
           schedule(ms)
+          break
         default:
           // running: keep the original start_time, only change the total duration
           setTotalTime(ms)

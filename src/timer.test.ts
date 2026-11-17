@@ -153,4 +153,19 @@ describe('Timer', () => {
     expect(timer.elapsedTime()).toBe(40)
     expect(timer.countdown()).toBe(60)
   })
+
+  test('首次 set 使用注入的假时钟不会同步触发（idle 分支不落入 running）', () => {
+    let now = 0
+    const clock = () => (now += 10)
+    const onTimeout = vi.fn()
+    const timer = Timer(clock, onTimeout)
+
+    timer.set(5)
+
+    // 修复前：idle 分支会继续落入 running 分支，发现已“超时”并在 set 内同步 fire
+    expect(onTimeout).not.toHaveBeenCalled()
+
+    vi.advanceTimersByTime(5)
+    expect(onTimeout).toHaveBeenCalledTimes(1)
+  })
 })
