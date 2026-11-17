@@ -1,5 +1,5 @@
 import { test, expect, vi, beforeEach, afterEach } from 'vitest'
-import { Conveyor, ConveyorError } from './conveyor' // 请替换为你的实际导出路径
+import { Conveyor, ConveyorError, ConveyorInstance } from './conveyor' // 请替换为你的实际导出路径
 import { timeout } from './timeout'
 
 // 每次测试前开启假定时器
@@ -457,9 +457,63 @@ test('retireOne：退役正在执行的任务，触发 outside 中断', async ()
   // send() 立即结算为 retired；processor 仍会继续跑，但其结果会被忽略
   expect(await p).toEqual({ scene: 'retired/in_processing' })
   expect(con.getTaskStatus(taskId!)).toBe('retired/in_processing')
+  // retire 后工位立即释放，不等待 processor 结束
+  expect(con.getProcessing()).toEqual([])
 
   await vi.advanceTimersByTimeAsync(100)
   expect(con.getTaskStatus(taskId!)).toBe('retired/in_processing')
+  expect(con.getProcessing()).toEqual([])
+})
+
+test('retireOne 先释放工位再触发 outside 中断', async () => {
+  let seen: number[] | undefined
+  let con: ConveyorInstance<number, number>
+
+  con = Conveyor<number, number>(async (n, { abort_signal }) => {
+    abort_signal.receive(() => {
+      seen = con.getProcessing().map(task => task.payload)
+    })
+    await sleep(100)
+    return n
+  })
+
+  const p = con.send(1)
+  await vi.advanceTimersByTimeAsync(10)
+
+  con.retireOne(Conveyor.getTaskIDByPromise(p)!)
+
+  // outside 回调里看到的已是释放后的工位
+  expect(seen).toEqual([])
+
+  await p
+  await vi.advanceTimersByTimeAsync(100)
+})
+
+test('retireOne 立即释放工位并调度下一个任务', async () => {
+  const started: number[] = []
+  const con = Conveyor(async (n: number) => {
+    started.push(n)
+    await sleep(100)
+  })
+  con.setValve(1)
+
+  const p1 = con.send(1)
+  const p2 = con.send(2)
+  await vi.advanceTimersByTimeAsync(10)
+
+  const taskId1 = Conveyor.getTaskIDByPromise(p1)!
+  expect(started).toEqual([1])
+
+  expect(con.retireOne(taskId1)).toEqual({ scene: 'in_processing' })
+  expect(await p1).toEqual({ scene: 'retired/in_processing' })
+
+  // 工位已经立即空出，p2 应该已经进入 processing
+  expect(started).toEqual([1, 2])
+  expect(con.getProcessing().map(task => task.payload)).toEqual([2])
+  expect(con.getState()).toBe('working/controlled')
+
+  await vi.advanceTimersByTimeAsync(100)
+  await p2
 })
 
 test('retireOne 排队任务会取消 waiting timer', async () => {
@@ -503,13 +557,14 @@ test('retireOne 执行中任务会取消 processing timer，终态不被超时�
   expect(abortFn).toHaveBeenCalledWith('outside')
 
   expect(await p).toEqual({ scene: 'retired/in_processing' })
+  expect(con.getProcessing()).toEqual([])
 
   // 超过 processing timeout 时长后，状态仍应保持 retired/in_processing
   await vi.advanceTimersByTimeAsync(100)
   expect(con.getTaskStatus(taskId)).toBe('retired/in_processing')
   expect(abortFn.mock.calls).toEqual([['outside']])
 
-  // processor 真正结束后仍会释放工位并触发 processed
+  // 工位已在 retire 时释放；processor 真正结束后仍会触发 processed
   await vi.advanceTimersByTimeAsync(500)
   expect(sigProcessed).toHaveBeenCalledTimes(1)
 })
@@ -993,7 +1048,7 @@ test('getProcessing 只包含 processing 任务', async () => {
   expect(con.getProcessing()).toEqual([])
 })
 
-test('getProcessing 包含 retired/in_processing 直到 processor 结束', async () => {
+test('retireOne 执行中任务会立即释放 processing 工位', async () => {
   const con = Conveyor(async () => { await sleep(100) })
   const p = con.send(1)
   const taskId = Conveyor.getTaskIDByPromise(p)!
@@ -1001,13 +1056,14 @@ test('getProcessing 包含 retired/in_processing 直到 processor 结束', async
   con.retireOne(taskId)
 
   expect(await p).toEqual({ scene: 'retired/in_processing' })
-  expect(con.getProcessing().map(task => task.payload)).toEqual([1])
-  expect(con.getState()).toBe('working/controlled')
+  expect(con.getProcessing()).toEqual([])
+  expect(con.getState()).toBe('idle')
 
   await vi.advanceTimersByTimeAsync(100)
 
   expect(con.getProcessing()).toEqual([])
   expect(con.getState()).toBe('idle')
+  expect(con.getTaskStatus(taskId)).toBe('retired/in_processing')
 })
 
 test('处理超时后 getProcessing 立即不再包含任务', async () => {

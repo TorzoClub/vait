@@ -238,6 +238,15 @@ export function Conveyor<Payload, ProcessorReturn>(
     return [...processing_slots]
   }
 
+  function removeProcessingTask(task_id: TaskID) {
+    for (const task of processing_slots) {
+      if (task.id === task_id) {
+        processing_slots.delete(task)
+        return
+      }
+    }
+  }
+
   function startProcessing() {
     if (isDestroy()) { return }
 
@@ -508,8 +517,13 @@ export function Conveyor<Payload, ProcessorReturn>(
         waitingTimer.stop(will_remove_task_id)
         processingTimer.stop(will_remove_task_id)
         setTaskStatus(will_remove_task_id, 'retired/in_processing')
+        // retire 的语义是立即放弃该任务的并发工位：
+        // processor 仍可在后台运行，但不能继续占用阀门槽位。
+        // 先移除槽位，再触发 outside 中断，保证中断处理器里看到的就是已释放状态。
+        removeProcessingTask(will_remove_task_id)
         getAbortSignal(will_remove_task_id).trigger('outside')
         triggerDoneSignal(will_remove_task_id, { scene: 'retired/in_processing' })
+        startProcessing()
         return { scene: 'in_processing' }
       } else {
         return result

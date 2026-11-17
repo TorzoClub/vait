@@ -73,7 +73,7 @@ for (const result of results) {
    - 挂处理超时。
 6. **结算**：processor 成功、失败、处理超时、被退役或被销毁时，按对应路径结算结果，并在需要时继续调度后面的任务。
 
-> 调度是「填满空闲工位」式的：每次任务结束、超时或阀门变大，都会重新尝试从积压中取任务。
+> 调度是「填满空闲工位」式的：每次任务结束、`retire`、超时或阀门变大，都会重新尝试从积压中取任务。
 
 ---
 
@@ -212,10 +212,10 @@ const con = Conveyor(async (url: string, { id, abort_signal }) => {
 | 任务位置 | 返回值 | 效果 |
 | --- | --- | --- |
 | 积压中 | `{ scene: 'retired' }` | 移出积压，状态 `retired/in_waiting`，`send` 以 `{ scene: 'retired/in_waiting' }` 结算 |
-| 执行中 | `{ scene: 'in_processing' }` | 状态 `retired/in_processing`，触发 `'outside'` 中断，`send` 立即以 `{ scene: 'retired/in_processing' }` 结算 |
+| 执行中 | `{ scene: 'in_processing' }` | 状态 `retired/in_processing`，触发 `'outside'` 中断，`send` 立即以 `{ scene: 'retired/in_processing' }` 结算，并立即释放并发工位 |
 | 不存在 | `{ scene: 'not_found' }` | 无效果 |
 
-**执行中退役的注意点**：`retireOne` 会取消该任务的 waiting 与 processing Timer，立即把 `send()` 结算成 `retired/in_processing`，状态写为 `retired/in_processing`（终态）。processor 仍会继续运行，之后它的返回或异常会被忽略，不会触发 `sig_processor_done` / `sig_processor_failure`，只在 processor 真正结束时触发 `sig_processor_processed`。由于 Timer 已取消，处理超时不会再触发或覆盖状态；但如果 processor 永不结束，该任务的并发工位会一直被占用。
+**执行中退役的注意点**：`retireOne` 会取消该任务的 waiting 与 processing Timer，立即把 `send()` 结算成 `retired/in_processing`，状态写为 `retired/in_processing`（终态），并**立即释放该任务的并发工位**：processor 仍可在后台继续运行，但不会再占用阀门槽位；调度器会马上尝试补派下一个任务。被退役但尚未结束的 processor 不再计入阀门并发，因此实际同时运行的 processor 数量可能短暂超过 `valve`。processor 之后的返回 / 异常会被忽略，不会触发 `sig_processor_done` / `sig_processor_failure`，只在 processor 真正结束时触发 `sig_processor_processed`。由于 Timer 已取消，处理超时不会再触发或覆盖状态；即使 processor 永不结束，工位也不会一直被占用。
 
 ### retireOneIgnoreProcessing(id)
 
@@ -295,7 +295,7 @@ const processing = con.getProcessing()
 ```
 
 - 不包含排队任务。
-- 包含 `retired/in_processing` 中 processor 尚未结束的任务（它们仍占用工位）。
+- 不包含 `retired/in_processing`：`retireOne` 会立即释放工位，processor 可能仍在后台运行。
 - 处理超时后立即移除（processor 之后结束不会重新加入）。
 - 返回的是数组快照，不是内部 Set。
 - 与 `getBlacklogs()` 一样被 `WithDestroy` 包装；destroy 后调用会抛 `ConveyorError`。
@@ -336,7 +336,7 @@ const result = await promise
 - `setBacklogsLimit(0)` 会让所有 `send` 溢出，即使当前没有任务在执行。
 - `getBlacklogs()` 返回内部数组引用，外部修改会破坏队列；需要快照请自行 `[...con.getBlacklogs()]`。
 - `destroy` 后，排队任务状态为 `destroyed`；`getTaskStatus` 仍可查询。
-- 执行中 `retireOne` / `destroy` 会取消 Timer，但不会强制停止 processor；并发工位要等 processor 真正结束后的 `.finally` 才释放。如果 processor 永不结束，该工位会一直占用。
+- 执行中 `retireOne` / `destroy` 会取消 Timer，但不会强制停止 processor；两者都会立即释放该任务占用的并发工位（`retireOne` 释放后调度器会补派下一个任务，`destroy` 则清空全部槽位），不会等 processor 的 `.finally`。processor 永不结束也不会继续占用工位。
 - `abort_signal` 不会重放；processor 延迟订阅时仍可能错过中断。
 - `setWaitingTimeout(-1)` / `setProcessingTimeout(-1)` 会取消并移除当前 Timer；之后再改成正数或 `0` 会为已存在任务重新创建 Timer，从启用时刻开始计时。
 - 超时配置是 Conveyor 级别的，会同时影响该实例上所有已存在的 Timer（正数改正数保留各自起点）。
