@@ -1,6 +1,6 @@
-# 上下文与事件（已废弃）
+# 上下文与事件（Deprecated）
 
-> **已废弃**：这两个模块已移至 `src/deprecated/`，并且**没有**从 `src/index.ts` 导出，`import { CreateContext } from 'vait'` 不可用。请勿在新代码中使用；若需查阅，请从源码路径引入，例如 `import { CreateContext } from './deprecated/context'`。
+> **Deprecated**：这两个模块已移至 `src/deprecated/`，并且**没有**从 `src/index.ts` 导出，`import { CreateContext } from 'vait'` 和 `import { Event } from 'vait'` 不可用。不应在新代码中使用；如需查阅，可直接阅读 `src/deprecated/context.ts` 与 `src/deprecated/event.ts`。
 
 ---
 
@@ -9,8 +9,7 @@
 一个带类型、键集合固定的共享容器。
 
 ```ts
-import { CreateContext } from './deprecated/context'
-
+// 以下示例假设已从源码 src/deprecated/context 引入 CreateContext
 const ctx = CreateContext({ count: 0, name: 'vait' })
 
 ctx.has('count')     // true
@@ -61,17 +60,17 @@ function inc(ctx: Ctx) {
 带类型约束的多事件发布 / 订阅。
 
 ```ts
-import { Event } from './deprecated/event'
-
+// 以下示例假设已从源码 src/deprecated/event 引入 Event
 const ev = Event<{
   message: string
   count: number
 }>()
 
-const off = ev.on('message', msg => console.log(msg))
+const onMessage = (msg: string) => console.log(msg)
+ev.on('message', onMessage)
 ev.emit('message', 'hello')
 
-off()
+ev.cancelReceive('message', onMessage)
 ev.isEmpty('message') // true
 ```
 
@@ -79,7 +78,7 @@ ev.isEmpty('message') // true
 
 | 成员 | 说明 |
 | --- | --- |
-| `on(name, handler)` | 注册监听，返回取消函数 |
+| `on(name, handler)` | 注册监听；取消监听使用 `cancelReceive` |
 | `cancelReceive(name, handler)` | 按函数引用移除监听 |
 | `emit(name, payload)` | 触发，同步执行监听器 |
 | `isEmpty(name)` | 该事件是否没有任何监听器 |
@@ -87,5 +86,6 @@ ev.isEmpty('message') // true
 **细节**
 
 - 事件名与 payload 类型由泛型 `EventSetting` 决定，编译期即可校验。
+- `on` 的类型声明返回 `void`；取消监听应使用 `cancelReceive(name, handler)`，不要依赖 `on` 的返回值。
 - `emit` 与 `Signal.trigger` 采用相同的错误策略：忽略监听器错误，继续执行其余监听器。
-- 与 `Signal` 的区别：`Event` 支持多个命名事件；`Signal` 每个实例只有一条“频道”。
+- 与 `Signal` 的区别：`Event` 支持多个命名事件；`Signal` 每个实例只有一种 payload 类型。

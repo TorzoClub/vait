@@ -1,4 +1,4 @@
-# 可观察状态：Memo
+# 可观察状态：Memo（Stable）
 
 `Memo` 是一个「取值 / 设值 + 校验器 + 监听器」的最小状态容器。
 
@@ -96,7 +96,7 @@ Memo.forward(from, to) // 立即把 from 的值同步给 to，并持续单向转
 
 ## WithValidating
 
-在既有 Memo 之上包一层“带校验的视图”。
+基于已有 Memo 创建一个带校验的 Memo。
 
 ```ts
 const base = Memo(0)
@@ -153,7 +153,7 @@ Memo.change(source, 7) // source 变为 7，但 watching 仍是 5，信号不触
 - 直接改 `source`：不会反映到 `watchingMemo`，也不触发信号（单向转发 `watching → source`）。
 - 在信号回调里再次写 `watchingMemo` 会因递归设值抛 `SignalError`，其 `cause` 是 `MemoError("can't setData in hooks")`。
 
-> 换句话说，`ChangedSignal` 更适合“作为可观察的写入代理”，而不是“监听外部对 Memo 的改动”。想监听任意改动请直接用 `Memo.watch`。
+> `ChangedSignal` 更适合作为可观察的写入入口，而不是监听外部对 Memo 的改动。需要监听任意改动时，应直接使用 `Memo.watch`。
 
 ---
 

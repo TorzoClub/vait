@@ -1,4 +1,4 @@
-# 定时器：Timer
+# 定时器：Timer（Stable）
 
 ```ts
 import { Timer } from 'vait'
@@ -35,7 +35,7 @@ export function Timer(
 | 成员 | 说明 |
 | --- | --- |
 | `set(ms)` | 开始或重新设定计时；校验 `ms` 为非负安全整数 |
-| `cancel()` | 取消计时并冻结 `countdown` / `elapsedTime`；之后 `set` 抛错 |
+| `cancel()` | 取消计时并固定 `countdown` / `elapsedTime`；之后 `set` 抛错 |
 | `countdown()` | 距离触发还剩多少时间 |
 | `elapsedTime()` | 从第一次 `set` 开始经过的时间 |
 
@@ -49,8 +49,8 @@ export function Timer(
 | --- | --- | --- | --- |
 | `idle` | 还没有调用 `set` | `Infinity` | `0` |
 | `running` | 正在计时 | 剩余时间 | 已流逝时间 |
-| `canceled` | 调用了 `cancel` | 冻结值 | 冻结值 |
-| `fired` | `onTimeout` 已触发 | `0` | 冻结值 |
+| `canceled` | 调用了 `cancel` | 固定值 | 固定值 |
+| `fired` | `onTimeout` 已触发 | `0` | 固定值 |
 
 ### set
 
@@ -60,14 +60,14 @@ export function Timer(
   - 剩余 `<= 0`：立即触发 `onTimeout`；
   - `ms === 0`：重挂 0ms 定时器。
 - `canceled` / `fired` 状态再调用：抛 `Error`。
-- 校验：`Number.isSafeInteger(ms)` 且 `ms >= 0`。负数抛 `RangeError`，小数 / `NaN` / `Infinity` / 超出安全整数范围抛 `TypeError`。
+- 校验：`Number.isSafeInteger(ms)` 且 `ms >= 0`。非安全整数（小数、`NaN`、`Infinity`、超出安全整数范围）抛 `TypeError`；安全整数中小于 `0` 的值抛 `RangeError`。
 
 ### cancel
 
 - 清掉内部定时器，进入 `canceled`。
-- 冻结 `countdown` 与 `elapsedTime`：
-  - 如果取消前是 `idle`，`countdown` 冻结为 `Infinity`，`elapsedTime` 冻结为 `0`；
-  - 如果取消前是 `running`，冻结取消时刻的剩余时间与已流逝时间。
+- 固定 `countdown` 与 `elapsedTime`：
+  - 如果取消前是 `idle`，`countdown` 固定为 `Infinity`，`elapsedTime` 固定为 `0`；
+  - 如果取消前是 `running`，固定为取消时刻的剩余时间与已流逝时间。
 - 重复调用 `cancel` 是安全的。
 - 一旦 `cancel`，实例永久失效；之后 `set` 抛错。
 
@@ -77,7 +77,7 @@ export function Timer(
 
 - 进入 `fired`；
 - `countdown()` 变为 `0`；
-- `elapsedTime()` 冻结在触发时刻；
+- `elapsedTime()` 固定在触发时刻；
 - 之后再调用 `set` 抛错。
 
 ---
@@ -98,7 +98,7 @@ setTimeout(() => {
   console.log(timer.countdown())   // 约 3000
   console.log(timer.elapsedTime()) // 约 2000
   timer.set(8000)                  // 保留原起点，总时长改为 8000ms
-  timer.cancel()                   // 冻结；此后 set 会抛错
+  timer.cancel()                   // 取消后固定；此后 set 会抛错
 }, 2000)
 ```
 

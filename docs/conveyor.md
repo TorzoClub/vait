@@ -1,17 +1,17 @@
-# 任务编排：Conveyor
+# 任务编排：Conveyor（Stable）
 
 ```ts
 import { Conveyor } from 'vait'
 ```
 
-`Conveyor` 是一条「传送带」：你把任务 `send` 上去，它按阀门（并发上限）把任务交给唯一的 `processor` 处理，并把每个任务的结果直接返回给你。
+`Conveyor` 是任务编排器：`send(payload)` 提交任务，由构造时传入的 `processor` 在并发上限内处理，并把该任务的结算结果返回给调用方。
 
-与遗留的 `Queue` 不同，`Conveyor` 不是一个可长期持有、自带 `pause` / payload 映射的队列，而是一个**带背压、超时、中断与结构化结果的任务编排器**：
+`Conveyor` 与 `Queue` 是独立实现。`Queue` 提供长期队列、payload 映射和队列信号，但已归入 Legacy；`Conveyor` 面向带背压、超时、中断与结构化结果的任务编排：
 
-- `send(payload)` 直接返回该任务的结果 Promise（`done` / `overflow` / `processor_failure` / `retired/in_waiting` / `retired/in_processing` / 两种 timeout）；
-- 每个任务都有独立状态、独立中断信号，可按 ID 查询或退役；
+- `send(payload)` 返回该任务的结算 Promise（`done` / `overflow` / `processor_failure` / `retired/in_waiting` / `retired/in_processing` / 两种 timeout）；
+- 每个任务都有独立状态和独立中断信号，可按 ID 查询或退役；
 - 支持积压上限（背压）、等待超时与处理超时；
-- 默认串行（阀门为 1），通过 `setValve` 放大并发。
+- 默认并发上限为 `1`（串行），通过 `setValve` 提高并发上限。
 
 ---
 
@@ -46,13 +46,13 @@ for (const result of results) {
 
 | 配置 | 默认值 | 设置方法 | 说明 |
 | --- | --- | --- | --- |
-| 阀门（并发上限） | `1` | `setValve(n)` | 同时处理的任务数；默认串行；`Infinity` 表示不限制 |
+| 并发上限 | `1` | `setValve(n)` | 同时处理的任务数；默认串行；`Infinity` 表示不限制 |
 | 积压上限 | `Infinity` | `setBacklogsLimit(n)` | 排队任务数达到上限后，新的 `send` 直接返回 `overflow`；`Infinity` 表示无限积压 |
 | 等待超时 | `-1`（不启用） | `setWaitingTimeout(ms)` | 任务在积压中等待超过 `ms` 后以 `timeout/in_waiting` 结束；`0` 表示 0ms |
 | 处理超时 | `-1`（不启用） | `setProcessingTimeout(ms)` | processor 执行超过 `ms` 后以 `timeout/in_processing` 结束，并触发 `timeout` 中断；`0` 表示 0ms |
 
-- `setValve` 接受**非负整数或 `Infinity`**：负整数抛 `RangeError`；非整数（包括小数、`NaN`）抛 `TypeError`；`Infinity` 表示不限制并发。设为 `0` 会暂停派发新任务（已在执行的任务不受影响），之后再调大即可继续。
-- 积压上限接受**非负整数或 `Infinity`**：负整数抛 `RangeError`；小数、`NaN` 抛 `TypeError`；`Infinity` 表示无限积压（只受内存限制）。积压上限只统计**排队中**的任务，不包含正在处理的任务；检查发生在任务入队之前（`当前积压数 >= limit` 即溢出），因此 `setBacklogsLimit(0)` 会让所有 `send` 都返回 `overflow`，即使当前有空闲工位。
+- `setValve` 接受**非负整数或 `Infinity`**：负整数抛 `RangeError`；非整数（包括小数、`NaN`）抛 `TypeError`；`Infinity` 表示不限制并发。设为 `0` 会暂停派发新任务（已在执行的任务不受影响），之后再提高即可继续派发。
+- 积压上限接受**非负整数或 `Infinity`**：负整数抛 `RangeError`；小数、`NaN` 抛 `TypeError`；`Infinity` 表示无限积压（只受内存限制）。积压上限只统计**排队中**的任务，不包含正在处理的任务；检查发生在任务入队之前（`当前积压数 >= limit` 即溢出），因此 `setBacklogsLimit(0)` 会让所有 `send` 都返回 `overflow`，即使当前并发上限仍有余量。
 - 两个超时 setter 接受**安全整数且 `>= -1`**：`-1` 表示不使用定时器，`0` 表示 0ms，正数表示毫秒；`Infinity`、小数、`NaN`、超出安全整数范围会抛 `TypeError`，小于 `-1` 的整数抛 `RangeError`。校验失败不会改变旧配置。
 - 超时底层由 `Timer` 实现，时间语义详见 [定时器](./timer.md)。
 
@@ -66,14 +66,14 @@ for (const result of results) {
 2. **背压检查**：当前积压数 `>=` 积压上限时，立即返回 `{ scene: 'overflow' }`，不创建任务。
 3. **创建任务**：分配 Symbol 作为 TaskID，记录 payload，创建结果通道（done signal），把任务放入积压，状态置为 `waiting`。
 4. **挂等待超时**：如果启用了等待超时，为这个任务挂一个定时器；超时后把它从积压移除并以 `timeout/in_waiting` 结算。
-5. **调度**：调用内部 `startProcessing`。只要有空闲工位且有积压，就按阀值取出任务：
+5. **调度**：调用内部 `startProcessing`。只要正在处理的任务数小于并发上限且有积压，就按并发上限取出任务：
    - 状态置为 `processing`；
    - 触发 `sig_processor_will_process`；
    - 调用 `processor(payload, { id, abort_signal })`；
    - 挂处理超时。
 6. **结算**：processor 成功、失败、处理超时、被退役或被销毁时，按对应路径结算结果，并在需要时继续调度后面的任务。
 
-> 调度是「填满空闲工位」式的：每次任务结束、`retire`、超时或阀门变大，都会重新尝试从积压中取任务。
+> 调度会在任务结束、`retire`、超时或并发上限提高时重新从积压中取任务，使正在处理的任务数不超过并发上限。
 
 ---
 
@@ -86,7 +86,7 @@ send(payload)
    ▼
 [waiting] ──等待超时──► [timeout/in_waiting] ──► send resolve
    │
-   │  出队（有空闲工位）
+   │  出队（并发上限仍有余额）
    │  sig_processor_will_process
    ▼
 [processing]
@@ -155,7 +155,7 @@ send(payload)
 
 ### 处理超时（`setProcessingTimeout`）
 
-- 任务开始处理时，如果处理超时 `>= 0`，创建 Timer；触发时触发 `abort_signal` 的 `'timeout'`，状态置为 `timeout/in_processing`，`send` 以 `{ scene: 'timeout/in_processing', elapsed_time }` 结算，并腾出并发工位继续调度。
+- 任务开始处理时，如果处理超时 `>= 0`，创建 Timer；触发时触发 `abort_signal` 的 `'timeout'`，状态置为 `timeout/in_processing`，`send` 以 `{ scene: 'timeout/in_processing', elapsed_time }` 结算，并让该任务不再计入并发上限，以便继续调度。
 - 超时为 `-1` 时**不创建 Timer**；之后改成正数或 `0`，会为正在处理的任务补建 Timer，并从启用时刻开始计时。
 - 处理超时后，processor 后续的 resolve / reject 都会被忽略，不会改写状态或再次结算。
 - Timer 只触发一次；触发后会进入 `fired` 状态，不能再次 `set`。
@@ -195,7 +195,7 @@ const con = Conveyor(async (url: string, { id, abort_signal }) => {
 
 要点：
 
-- `abort_signal` 是**通知**，不是强制取消。Conveyor 不会替你终止 processor，也不会等待 processor 响应；processor 需要自己监听并尽快结束。
+- `abort_signal` 是**通知**，不是强制取消。Conveyor 不会代替 processor 终止任务，也不会等待 processor 响应；processor 需要自行监听并尽快结束。
 - 只对执行中的任务触发；排队阶段的任务被退役 / 超时时不会调用 processor，因此也没有中断信号。
 - 处理超时后，processor 的最终结果会被忽略。销毁后，processor 仍会继续运行，但它的最终结果不再用于结算 `send()`（此时 `send()` 已经返回 `destroyed`）。
 - processor 是同步调用的：如果它在调用过程中同步订阅了 `abort_signal`，`send()` 返回后再调用 `destroy` / `retireOne` 能正常收到中断。
@@ -212,10 +212,16 @@ const con = Conveyor(async (url: string, { id, abort_signal }) => {
 | 任务位置 | 返回值 | 效果 |
 | --- | --- | --- |
 | 积压中 | `{ scene: 'retired' }` | 移出积压，状态 `retired/in_waiting`，`send` 以 `{ scene: 'retired/in_waiting' }` 结算 |
-| 执行中 | `{ scene: 'in_processing' }` | 状态 `retired/in_processing`，触发 `'outside'` 中断，`send` 立即以 `{ scene: 'retired/in_processing' }` 结算，并立即释放并发工位 |
+| 执行中 | `{ scene: 'in_processing' }` | 状态 `retired/in_processing`，触发 `'outside'` 中断，`send` 立即以 `{ scene: 'retired/in_processing' }` 结算，并立即使该任务不再计入并发上限 |
 | 不存在 | `{ scene: 'not_found' }` | 无效果 |
 
-**执行中退役的注意点**：`retireOne` 会取消该任务的 waiting 与 processing Timer，立即把 `send()` 结算成 `retired/in_processing`，状态写为 `retired/in_processing`（终态），并**立即释放该任务的并发工位**：processor 仍可在后台继续运行，但不会再占用阀门槽位；调度器会马上尝试补派下一个任务。被退役但尚未结束的 processor 不再计入阀门并发，因此实际同时运行的 processor 数量可能短暂超过 `valve`。processor 之后的返回 / 异常会被忽略，不会触发 `sig_processor_done` / `sig_processor_failure`，只在 processor 真正结束时触发 `sig_processor_processed`。由于 Timer 已取消，处理超时不会再触发或覆盖状态；即使 processor 永不结束，工位也不会一直被占用。
+**执行中退役的注意点**：
+
+- `retireOne` 会取消该任务的 waiting 与 processing Timer，立即把 `send()` 结算成 `retired/in_processing`，状态写为 `retired/in_processing`（终态）。
+- 该任务会立即从正在处理集合中移除；processor 仍可在后台继续运行，但不再计入并发上限，调度器会继续派发下一个任务。
+- 被退役但尚未结束的 processor 不再计入并发上限，因此实际同时运行的 processor 数量可能短暂超过 `valve`。
+- processor 之后的返回或异常会被忽略，不会触发 `sig_processor_done` / `sig_processor_failure`，只在 processor 真正结束时触发 `sig_processor_processed`。
+- Timer 已取消，处理超时不会再触发或覆盖状态；即使 processor 永不结束，也不会阻止后续任务派发。
 
 ### retireOneIgnoreProcessing(id)
 
@@ -228,7 +234,7 @@ const con = Conveyor(async (url: string, { id, abort_signal }) => {
 - 排队中的任务：取消 waiting Timer，状态置为 `destroyed`，从 backlog 移除；`send()` 以 `ConveyorError` 拒绝。
 - 执行中的任务：取消 processing / waiting Timer，收到 `'destroy'` 中断，状态置为 `destroyed`；`send()` 立即以 `{ scene: 'destroyed' }` 结算，但 processor 会继续运行到结束，其最终结果被忽略。
 - 销毁后：`send` 返回 rejected Promise；`setValve` / `setBacklogsLimit` / 两个超时 setter / `getBlacklogs` / `retireOne*` 都会同步抛出 `ConveyorError`；`getTaskStatus` 仍可调用，用于查询 `destroyed` 状态；`signals` 仍可访问。
-- 销毁不可逆。若还需要继续投递任务，请新建一个 Conveyor。
+- 销毁不可逆。需要继续投递任务时，应新建一个 Conveyor。
 
 ```ts
 con.destroy()
@@ -257,7 +263,7 @@ await con.send(1).catch(err => {
 - 处理超时：不会触发 `sig_processor_processed`，也不会触发 `sig_processor_failure`（即使 processor 之后抛错）。
 - 执行中退役 / 销毁：`send()` 已在退役/销毁时结算；processor 后续的 resolve / reject 会被忽略，不会触发 `sig_processor_done` / `sig_processor_failure`，但 processor 真正结束时仍会触发 `sig_processor_processed`。
 
-> `Signal` 的通用语义：同步触发、按注册顺序执行；`trigger` 会吞掉监听器异常并 `console.warn`，需要抛出时用 `triggerCareError`。详见 [信号](./signal.md)。
+> `Signal` 的通用语义：同步触发、按注册顺序执行；`trigger` 会忽略监听器异常并 `console.warn`，需要抛出时使用 `triggerCareError`。详见 [信号](./signal.md)。
 
 ---
 
@@ -288,14 +294,14 @@ if (state === 'destroyed') {
 
 ### getProcessing()
 
-返回当前占用 processing 工位的任务快照：
+返回当前占用 `processing` 状态的任务快照：
 
 ```ts
 const processing = con.getProcessing()
 ```
 
 - 不包含排队任务。
-- 不包含 `retired/in_processing`：`retireOne` 会立即释放工位，processor 可能仍在后台运行。
+- 不包含 `retired/in_processing`：`retireOne` 会立即将该任务从正在处理集合中移除，processor 可能仍在后台运行。
 - 处理超时后立即移除（processor 之后结束不会重新加入）。
 - 返回的是数组快照，不是内部 Set。
 - 与 `getBlacklogs()` 一样被 `WithDestroy` 包装；destroy 后调用会抛 `ConveyorError`。
@@ -303,6 +309,8 @@ const processing = con.getProcessing()
 ### getBlacklogs()
 
 返回当前积压中的任务数组（不包含正在处理的任务）。元素带有内部字段，**只读使用**，不要修改数组或任务对象；返回的是内部数组引用，直接 `push` / `splice` 会破坏内部状态。
+
+> API 名称保留现有拼写 `getBlacklogs`。
 
 ### getTaskStatus(id)
 
@@ -325,7 +333,17 @@ const result = await promise
 ```
 
 - 只有在任务被创建时才会记录映射；`overflow`、销毁后 `send` 的拒绝 Promise 都返回 `undefined`。
-- 请在 `await` 之前取 ID；拿到 ID 后可以配合 `retireOne` / `getTaskStatus` 使用。
+- 映射在任务创建时记录；如果需要在任务完成前退役或查询状态，应在 `await` 之前取 ID。任务完成后该映射仍可查询。
+
+---
+
+## 类型与导出
+
+从包入口可导入以下与 Conveyor 相关的导出：
+
+`Conveyor`、`ConveyorInstance`、`ConveyorSendResult`、`ConveyorState`、`ConveyorError`、`AbortCause`、`TaskStatus`、`RetireResult`。
+
+`TaskID` 与 `Task` 是内部类型，没有从包入口导出；信号回调中的 `TaskID` 以 Symbol 形式传递，通常不需要显式标注类型。
 
 ---
 
@@ -334,29 +352,29 @@ const result = await promise
 - `setValve(Infinity)` 合法，表示不限制并发；`setBacklogsLimit(Infinity)` 合法，表示无限积压。
 - `setWaitingTimeout(Infinity)` / `setProcessingTimeout(Infinity)` 会抛 `TypeError`；超时只接受安全整数（`-1` 或 `>= 0`）。
 - `setBacklogsLimit(0)` 会让所有 `send` 溢出，即使当前没有任务在执行。
-- `getBlacklogs()` 返回内部数组引用，外部修改会破坏队列；需要快照请自行 `[...con.getBlacklogs()]`。
+- `getBlacklogs()` 返回内部数组引用，外部修改会破坏队列；需要快照时应使用 `[...con.getBlacklogs()]`。
 - `destroy` 后，排队任务状态为 `destroyed`；`getTaskStatus` 仍可查询。
-- 执行中 `retireOne` / `destroy` 会取消 Timer，但不会强制停止 processor；两者都会立即释放该任务占用的并发工位（`retireOne` 释放后调度器会补派下一个任务，`destroy` 则清空全部槽位），不会等 processor 的 `.finally`。processor 永不结束也不会继续占用工位。
+- 执行中 `retireOne` / `destroy` 会取消 Timer，但不会强制停止 processor；两者都会立即将该任务从正在处理集合中移除（`retireOne` 之后调度器继续派发下一个任务，`destroy` 则清空处理中的任务集合），不会等 processor 的 `.finally`。processor 永不结束也不会继续计入并发上限。
 - `abort_signal` 不会重放；processor 延迟订阅时仍可能错过中断。
 - `setWaitingTimeout(-1)` / `setProcessingTimeout(-1)` 会取消并移除当前 Timer；之后再改成正数或 `0` 会为已存在任务重新创建 Timer，从启用时刻开始计时。
 - 超时配置是 Conveyor 级别的，会同时影响该实例上所有已存在的 Timer（正数改正数保留各自起点）。
 
 ---
 
-## 与 Queue / QueuePool 的取舍
+## 与 Legacy 模块的关系
 
-| 需求 | 推荐 |
-| --- | --- |
-| 需要长期持有、随时投递、`pause` / `resume`、payload 映射、`ALL_DONE` | `Queue`（遗留） |
-| 需要按 key 分组、组内串行 | `QueuePool`（遗留），或每个 key 建一个 `Conveyor` |
-| 需要背压、等待 / 处理超时、单任务中断、结构化结果 | `Conveyor` |
-| 只是批量并发 map | `concurrentMap` |
+`Queue` / `QueuePool` 已归入 Legacy；完整选择见 [文档索引](./README.md) 的 API 选择表。
 
-`Conveyor` 没有 `pause` / `resume`，需要暂停派发时把阀门设为 `0`；它也没有 payload 映射表，因为 `send` 的 payload 会直接传给 processor。
+- `Queue` 提供长期队列、payload 映射和队列信号；没有 `pause()` / `resume()` 方法，暂停派发通过 `setMaxConcurrent(0)`。
+- `QueuePool` 提供按 ID 分组、组内串行和 `pause()` / `resume()`。
+- 需要按 key 分组串行时，也可以为每个 key 建一个 `Conveyor`。
+- `Conveyor` 自身没有 `pause` / `resume`，需要暂停派发时把并发上限设为 `0`；它没有 payload 映射表，`send` 的 payload 会直接传给 processor。
 
 ---
 
 ## 示例
+
+> 示例只展示 API 用法，省略业务函数、错误处理和完整上下文，不保证可直接运行。
 
 ### 限流处理
 
@@ -382,6 +400,7 @@ const data = results.flatMap(result => (
 ### 背压 + 等待超时
 
 ```ts
+// Job、runJob、jobs 为业务对象占位
 const con = Conveyor(async (job: Job) => {
   await runJob(job)
 })
@@ -434,6 +453,7 @@ if (result.scene === 'timeout/in_processing') {
 ### 查询状态与退役
 
 ```ts
+// Task、taskA、taskB 为业务对象占位
 const con = Conveyor(async (task: Task) => {
   await task.run()
 })

@@ -1,4 +1,4 @@
-# 基础异步原语
+# 基础异步原语（Stable）
 
 ```ts
 import {
@@ -129,7 +129,7 @@ rejectTimeout(t)    // t 立刻以 TimeoutRejected 拒绝，并清除定时器
 
 **细节**
 
-- `rejectTimeout` 对**非`timeout` 创建的 Promise 是空操作**（内部用 `WeakMap` 记录）。
+- `rejectTimeout` 对**非 `timeout` 创建的 Promise 是空操作**（内部用 `WeakMap` 记录）。
 - 被取消时会 `clearTimeout`，不会残留定时器。
 - 拒绝错误的类型是 `TimeoutRejected`。
 - 已经 resolve 之后调用 `rejectTimeout` 不会改变结果。
@@ -163,6 +163,7 @@ import { Wait } from 'vait'
 
 const [waiting, done, cancel] = Wait<string>()
 
+// socket 为外部对象占位
 socket.on('message', done)
 socket.on('close', () => cancel(new Error('socket closed')))
 
