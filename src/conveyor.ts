@@ -152,12 +152,12 @@ function Guard(
       )
 }
 
-const conveyor_defaults = {
+const conveyor_defaults = Object.freeze({
   valve: 1,
   blacklogs_limit: Infinity,
   waiting_time: -1,
   processing_time: -1,
-} as const
+})
 
 function assertBacklogsLimit(v: number) {
   if (v !== Infinity && !Number.isInteger(v)) {
