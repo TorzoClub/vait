@@ -1,75 +1,48 @@
-# vait 使用文档
+# vait 文档
 
-`vait` 是一组面向异步编程的实用工具函数，核心围绕三件事：
+`vait` 提供异步编程中的任务调度、等待、定时与状态管理工具。本页是文档索引，同时给出稳定性分级和 API 选择表。
 
-- **串行 / 并发调度**：让任务按顺序执行，或限制同时执行的任务数量。
-- **Promise 与等待**：手动控制 Promise 的完成时机（`OutterPromise`、`Wait`）、延时与超时（`Timer`、`timeout`）。
-- **响应式基础件**：可观察的值（`Memo`）、事件信号（`Signal`）、类型化上下文（`CreateContext`）。
+## 稳定性定义
 
-> 本目录文档基于仓库当前源码（分支 `v5`）编写，而不是已发布到 npm 的旧版 `dist`。若要发布，请先执行 `npm run build` 重新生成 `dist/` 与 `types/`。
+- **Stable**：从包入口导出，按公开 API 维护；文档和测试覆盖当前行为。
+- **Legacy**：仍从包入口导出，行为保持，但不再主动增加能力；新代码优先使用 Stable 替代。
+- **Deprecated**：不再从包入口导出，仅保留源码；不保证后续可用。
+- **Experimental**：位于 `src/experimental/`，不从入口导出，不参与 tsc、ESLint 和测试，不保证兼容。
 
-## 目录
+## API 选择
 
-| 文档 | 内容 |
-| --- | --- |
-| [安装与调用方式](./getting-started.md) | 安装、引入、构建、测试、命名约定 |
-| [基础异步原语](./primitives.md) | `OutterPromise`、`Wait`、`nextTick`、`Timer`、`timeout`、`rejectTimeout` |
-| [串行执行](./sequence.md) | `Sequence`、`Concurrent` |
-| [任务队列（遗留）](./queue.md) | `Queue`、`QueueSignal`、`WithPayload`、`runTask` |
-| [按 ID 的任务池（遗留）](./queue-pool.md) | `QueuePool` |
-| [并发控制](./concurrency.md) | `concurrency`、`concurrency.Valve`、`concurrency.each`、`concurrentMap` |
-| [信号](./signal.md) | `Signal`、`Signal.once`、`Signal.wait` |
-| [可观察状态](./memo.md) | `Memo`、`WithValidating`、`ChangedSignal` |
-| [上下文与事件](./context-event.md) | `CreateContext`、`Event`（未从入口导出） |
-| [实验性模块](./experimental.md) | `Val`（data.ts）、`new_memo.ts` |
-| [综合示例](./examples.md) | 限流抓取、任务队列、任务池、动态并发等 |
-
-> **遗留模块**：`queue`、`queue-pool` 已移至 `src/legacy/`，仍从包入口导出、API 未变，但不推荐用于新代码。
-> 新项目请使用 `Conveyor`（从入口导出）：支持阀门（并发上限）、积压上限、等待 / 处理超时、`retire` 与结构化结果。
-
-## 从包入口可以导入什么
-
-`src/index.ts` 对外导出如下内容（即 `import { ... } from 'vait'` 可用的名字）：
-
-| 导出 | 来源模块 | 说明 |
+| 场景 | 推荐 | 稳定性 |
 | --- | --- | --- |
-| `Wait`、`WaitingRejected` | wait | 手动控制完成时机的等待对象 |
-| `OutterPromise` | outter-promise | 暴露 `resolve/reject` 的 Promise 三元组 |
-| `Timer` | timer | 可取消的 `setTimeout` |
-| `timeout`、`rejectTimeout`、`TimeoutRejected` | timeout | 延时等待，可被外部取消 |
-| `nextTick` | next-tick | 一个微任务 tick |
-| `Sequence` | sequence | 串行执行器 |
-| `Concurrent` | concurrent | 带并发上限的串行执行器 |
-| `Queue`、`QueueSignal`、`WithPayload`、`runTask`、`QueueError` | legacy/queue | 任务队列（遗留） |
-| `QueuePool` | legacy/queue-pool | 按 ID 分组、组内串行的任务池（遗留） |
-| `Conveyor`、`ConveyorInstance`、`ConveyorSendResult`、`ConveyorError`、`AbortType` | conveyor | 推荐的任务编排：阀门、积压上限、超时、retire |
-| `concurrency`（含 `.Valve`、`.each`）、`concurrentMap` | concurrency / concurrent-map | 通用并发控制与并发 map |
-| `Signal`（含 `Signal.once`、`Signal.wait`） | signal | 事件信号 |
-| `Memo`、`MemoError`、`appendTypedFunc`、`WithValidating`、`ChangedSignal` | memo | 可观察值 |
+| 严格串行执行 | `Sequence`（或 `Concurrent(1)`） | Stable |
+| 固定并发上限的批量映射 | `concurrentMap` | Stable |
+| 消费任意迭代器或数组 | `concurrency` / `concurrency.each` | Stable |
+| 长期提交任务、背压、等待 / 处理超时、中断、结构化结果 | `Conveyor` | Stable |
+| 手动完成或取消 Promise | `Wait` / `OuterPromise` | Stable |
+| 延时、取消延时、可查询进度的定时器 | `timeout` / `rejectTimeout` / `Timer` | Stable |
+| 发布订阅、可观察状态 | `Signal` / `Memo` / `WithValidating` / `ChangedSignal` | Stable |
+| 按 key 分组串行 | 每个 key 建一个 `Conveyor` | Stable |
+| 已有 Queue 代码、队列信号、payload 映射 | `Queue` | Legacy |
+| 需要 QueuePool 的 `pause` / `resume`，或已有 QueuePool 代码 | `QueuePool` | Legacy |
+| 上下文、多命名事件 | `CreateContext` / `Event` | Deprecated |
+| 实验性原型 | `src/experimental/` | Experimental |
 
-> `context.ts`、`event.ts`、`data.ts`、`new_memo.ts` 目前**没有**从 `src/index.ts` 导出，需要以源码路径引入，详见对应文档。
+`Sequence` / `Concurrent` 的公开接口按 Stable 维护；当前实现基于 `Queue`，`Queue`（Legacy）的行为变化可能间接影响它们。
 
-## 一分钟速览
+## 文档目录
 
-```ts
-import { Sequence, Queue, concurrentMap, timeout } from 'vait'
-
-// 1. 串行执行
-const sq = Sequence()
-await sq(async () => {
-  await timeout(100)
-  return 'step 1'
-})
-await sq(async () => 'step 2')
-
-// 2. 队列：默认串行，可调并发、可监听
-const q = Queue()
-q.task(async () => { await timeout(100) })
-
-// 3. 并发 map：最多 5 个同时进行，结果顺序不变
-const list = await concurrentMap(5, [1, 2, 3], async (n) => {
-  await timeout(10)
-  return n * 2
-})
-console.log(list) // [2, 4, 6]
-```
+| 分组 | 文档 | 稳定性 | 内容 |
+| --- | --- | --- | --- |
+| 入门 | [安装与调用](./getting-started.md) | — | 环境要求、安装、引入、构建测试、命名约定 |
+| 基础原语 | [基础异步原语](./primitives.md) | Stable | `OuterPromise`、`Wait`、`nextTick`、`timeout`、`rejectTimeout` |
+| 调度与并发 | [串行执行：Sequence 与 Concurrent](./sequence.md) | Stable | 串行执行与固定并发上限 |
+| 调度与并发 | [并发控制：concurrency / Valve / each / concurrentMap](./concurrency.md) | Stable | 通用并发控制、动态并发上限、并发映射 |
+| API Reference | [定时器：Timer](./timer.md) | Stable | `set` / `cancel` / `countdown` / `elapsedTime` 与状态语义 |
+| API Reference | [信号：Signal](./signal.md) | Stable | `Signal`、`Signal.once`、`Signal.wait` |
+| API Reference | [可观察状态：Memo](./memo.md) | Stable | `Memo`、`WithValidating`、`ChangedSignal` |
+| Guides | [任务编排：Conveyor](./conveyor.md) | Stable | 并发上限、积压上限、等待 / 处理超时、中断、退役、状态查询 |
+| Legacy | [任务队列：Queue](./legacy/queue.md) | Legacy | `Queue`、`QueueSignal`、`WithPayload`、`runTask` |
+| Legacy | [按 ID 分组：QueuePool](./legacy/queue-pool.md) | Legacy | 按 ID 分组、组内串行、暂停与恢复 |
+| — | [综合示例](./examples.md) | — | 任务编排、并发映射、等待与超时、可观察状态 |
+| — | [迁移与变更记录](./migration.md) | — | v5 变更、Legacy / Deprecated 迁移、版本说明 |
+| 附录 | [上下文与事件](./deprecated/context-event.md) | Deprecated | `CreateContext`、`Event` |
+| 附录 | [实验场](./experimental.md) | Experimental | `src/experimental/` 的边界 |

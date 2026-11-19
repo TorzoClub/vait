@@ -16,3 +16,29 @@ export function removeItem<T>(
   const finded_idx = list.findIndex(removeCallback)
   return [finded_idx, (finded_idx === -1) ? list : removeByIndex(list, finded_idx)]
 }
+
+export function getWeakMapItem<K extends WeakKey, T>(
+  weakmap: WeakMap<K, T>,
+  key: K,
+  createDefault: () => T
+) {
+  const weakmap_item = weakmap.get(key)
+  if (weakmap_item === undefined) {
+    const new_item = createDefault()
+    weakmap.set(key, new_item)
+    return new_item
+  } else {
+    return weakmap_item
+  }
+}
+
+export function weakMapItemIfExist<K extends WeakKey, T>(
+  weakmap: WeakMap<K, T>,
+  key: K,
+  ifExistFn: (item: T) => void
+) {
+  const weakmap_item = weakmap.get(key)
+  if (weakmap_item !== undefined) {
+    ifExistFn(weakmap_item)
+  }
+}

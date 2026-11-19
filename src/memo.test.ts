@@ -48,6 +48,21 @@ test('Memo.forward', () => {
   expect(Memo.value(previous)).toBe(999)
 })
 
+test('Memo.forward 不会改写目标 setter 的 type，且目标已有 watcher 时仍可写', () => {
+  const from = Memo(0)
+  const to = Memo(100)
+  Memo.watch(to, () => {})
+  Memo.forward(from, to)
+
+  expect(to[1].type).toBe('setter')
+
+  expect(() => Memo.change(from, 3)).not.toThrow()
+  expect(Memo.value(to)).toBe(3)
+
+  expect(() => to[1](4)).not.toThrow()
+  expect(Memo.value(to)).toBe(4)
+})
+
 // 测试 Memo 在被卸载时的行为
 test('Memo should clean up properly after validation removal', () => {
   const memo = Memo(1)
@@ -222,6 +237,22 @@ test('WithValidating 不会在修改原 memo 的时候进行 validating', () => 
   expect(sourceGet()).toBe(5)
 })
 
+test('WithValidating 包住已有 watcher 的 base 时不会污染 base setter', () => {
+  const base = Memo(0)
+  Memo.watch(base, () => {})
+  const [get, set] = WithValidating(base, integerValidator)
+
+  expect(base[1].type).toBe('setter')
+
+  expect(() => set(10)).not.toThrow()
+  expect(base[0]()).toBe(10)
+  expect(get()).toBe(10)
+
+  expect(() => base[1](99)).not.toThrow()
+  expect(base[0]()).toBe(99)
+  expect(get()).toBe(10)
+})
+
 test('WithValidating/Memo.addValidator should prevent recursive updates', () => {
   const m = Memo(1.1)
   const [get,set] = m
@@ -361,6 +392,27 @@ test('WithWatching/Memo.watch should prevent recursive updates', () => {
   }
 
   global.console = beforeConsole
+})
+
+test('ChangedSignal 包住已有 watcher 的 source 时不会污染 source setter', () => {
+  const source = Memo(0)
+  Memo.watch(source, () => {})
+  const [watching, receive] = ChangedSignal(source)
+
+  let changed = 0
+  receive(() => { changed += 1 })
+
+  expect(source[1].type).toBe('setter')
+
+  expect(() => watching[1](5)).not.toThrow()
+  expect(source[0]()).toBe(5)
+  expect(watching[0]()).toBe(5)
+  expect(changed).toBe(1)
+
+  expect(() => Memo.change(source, 7)).not.toThrow()
+  expect(source[0]()).toBe(7)
+  expect(watching[0]()).toBe(5)
+  expect(changed).toBe(1)
 })
 
 // 测试 Memo.watch 与 Memo.addValidator 的结合

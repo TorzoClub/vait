@@ -1,10 +1,10 @@
 type Resolve<T> = (value: T | PromiseLike<T>) => void
 type Reject = (reason?: unknown) => void
-export type OutterPromise<T = void> = readonly [ Resolve<T>, Reject, Promise<T> ]
+export type OuterPromise<T = void> = readonly [ Resolve<T>, Reject, Promise<T> ]
 
-export function OutterPromise(): OutterPromise
-export function OutterPromise<T>(): OutterPromise<T>
-export function OutterPromise<T>(): OutterPromise<T> {
+export function OuterPromise(): OuterPromise
+export function OuterPromise<T>(): OuterPromise<T>
+export function OuterPromise<T>(): OuterPromise<T> {
   let resolve: undefined | Resolve<T>
   let reject: undefined | Reject
 

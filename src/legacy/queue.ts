@@ -1,6 +1,6 @@
 import { Memo, MemoGetter, MemoSetter } from '../memo'
-import { OutterPromise } from '../outter-promise'
-import { removeByItem } from '../utils'
+import { OuterPromise } from '../outer-promise'
+import { removeByItem } from '../internal/utils'
 import { nextTick } from '../next-tick'
 import { Signal } from '../signal'
 import { concurrency } from '../concurrency'
@@ -188,7 +188,7 @@ export function runTask<
   payload: P | TaskFunction<R>,
   taskFunc?: TaskFunction<R>,
 ): Promise<R> {
-  const [resolve, reject, promise] = OutterPromise<R>()
+  const [resolve, reject, promise] = OuterPromise<R>()
 
   if (queue.setPayload !== undefined) {
     queue.setPayload(taskFunc as TaskFunction<R>, payload as P)

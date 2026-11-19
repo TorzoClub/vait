@@ -1,4 +1,4 @@
-# 串行执行：Sequence 与 Concurrent
+# 串行执行：Sequence 与 Concurrent（Stable）
 
 ```ts
 import { Sequence, Concurrent, timeout } from 'vait'
@@ -26,14 +26,14 @@ console.log(results) // [1, 2, 3]
 
 | 项 | 说明 |
 | --- | --- |
-| `Sequence(q?)` | 可传入自己的 `Queue`；不传则内部创建一个并发度为 1 的队列 |
+| `Sequence(q?)` | 可传入一个普通 `Queue`；不传则内部创建一个并发度为 1 的队列 |
 | 返回 | `(taskFunc: () => Promise<R>) => Promise<R>` |
 
 **细节**
 
 - 任务严格按加入顺序依次开始。
-- 返回的 Promise 携带该任务的返回值 / 拒绝原因。
-- **出错不阻塞后续任务**：某个任务抛错只会让它自己的 Promise 拒绝：
+- 返回的 Promise 携带该任务的返回值；任务返回的 Promise reject 时携带拒绝原因。
+- **出错不阻塞后续任务**：某个任务返回的 Promise reject 只会让它自己的 Promise 拒绝：
 
 ```ts
 const sq = Sequence()
@@ -42,17 +42,9 @@ sq(async () => { throw new Error('boom') }).catch(() => {})
 await sq(async () => console.log('still works')) // still works
 ```
 
-- `Sequence` 可以传自定义队列，用来复用队列的信号 / payload 能力：
-
-```ts
-import { Queue, QueueSignal, Sequence } from 'vait'
-
-const q = Queue(QueueSignal())
-const sq = Sequence(q)
-
-q.signal.ERROR.receive(({ error }) => console.error('任务失败', error))
-sq(async () => { throw new Error('boom') })
-```
+- `Sequence(q?)` 的 `q` 是普通 `Queue`，与 [src/sequence.ts](../src/sequence.ts) 的签名一致；不传时内部创建一个并发度为 1 的队列。
+- 公开签名只接受普通 `Queue`：`QueueWithSignal` 需要自行处理类型兼容，`QueueWithPayload` 没有对应的 payload 参数；`Sequence` 本身不额外转发队列信号。需要 payload 映射或队列信号时，应直接使用 `Queue` / `WithPayload` 对应的 API。
+- 任务错误通过 `Sequence` 返回的 Promise 暴露；后续任务不会因前一个任务失败而停止。
 
 ---
 
@@ -83,10 +75,10 @@ console.log(list) // [0, 1, ..., 9]
 
 ```ts
 const run = Concurrent(1)
-run.setMaxConcurrent(5) // 运行中动态放大到 5
+run.setMaxConcurrent(5) // 运行中提高并发上限到 5
 ```
 
 **细节**
 
 - 返回的数组顺序对应任务加入顺序；完成顺序由并发决定，不保证。
-- `Concurrent` 只是 `Queue` 的一层薄封装。需要暂停、丢弃任务、信号、payload 时，请直接使用 [任务队列](./queue.md)。
+- `Concurrent` 基于 `Queue` 实现。`Queue` 已归入 Legacy；`Sequence` 和 `Concurrent` 的公开接口仍按 Stable 维护。需要队列信号、payload 映射或更细的队列控制时，应直接使用 [任务队列](./legacy/queue.md)。
