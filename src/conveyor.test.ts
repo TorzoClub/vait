@@ -1,5 +1,5 @@
 import { test, expect, vi, beforeEach, afterEach } from 'vitest'
-import { Conveyor, ConveyorError, ConveyorInstance } from './conveyor' // 请替换为你的实际导出路径
+import { Conveyor, ConveyorError, ConveyorInstance, type ConveyorSendResult } from './conveyor' // 请替换为你的实际导出路径
 import { timeout } from './timeout'
 
 // 每次测试前开启假定时器
@@ -1078,4 +1078,231 @@ test('处理超时后 getProcessing 立即不再包含任务', async () => {
   expect(con.getState()).toBe('idle')
 
   await vi.advanceTimersByTimeAsync(1000)
+})
+
+// ============================================================================
+// 9. 与 Queue / concurrency 的行为对齐（Legacy 用例迁移）
+// ============================================================================
+
+test('队列排空与 FIFO：valve=3 下 50 个任务按 send 顺序出队并全部完成', async () => {
+  const started: number[] = []
+
+  const con = Conveyor(async (n: number) => {
+    started.push(n)
+    await sleep(10)
+    return n
+  })
+
+  con.setValve(3)
+
+  const tasks = Array.from({ length: 50 }, (_, i) => con.send(i))
+
+  await vi.advanceTimersByTimeAsync(1000)
+
+  const results = await Promise.all(tasks)
+
+  // 出队顺序必须与 send 顺序一致（Queue keep sequence 的等价断言）
+  expect(started).toEqual(Array.from({ length: 50 }, (_, i) => i))
+
+  results.forEach((result, i) => {
+    expect(result).toEqual({ scene: 'done', return_value: i })
+  })
+
+  // 排空后回到 idle（Queue ALL_DONE + getStatus('pause') 的可观察等价）
+  expect(con.getBlacklogs()).toEqual([])
+  expect(con.getProcessing()).toEqual([])
+  expect(con.getState()).toBe('idle')
+})
+
+test('processor 失败不阻断队列，done / failure / processed 信号按任务触发并携带 TaskID', async () => {
+  const err = new Error('failure in the middle')
+  const sigWillProcess = vi.fn()
+  const sigDone = vi.fn()
+  const sigFailure = vi.fn()
+  const sigProcessed = vi.fn()
+
+  const con = Conveyor<number, string>(async (n) => {
+    await sleep(10)
+    if (n === 1) {
+      throw err
+    }
+    return `ok-${n}`
+  })
+
+  con.setValve(1)
+  con.signals.sig_processor_will_process.receive(sigWillProcess)
+  con.signals.sig_processor_done.receive(sigDone)
+  con.signals.sig_processor_failure.receive(sigFailure)
+  con.signals.sig_processor_processed.receive(sigProcessed)
+
+  const p0 = con.send(0)
+  const p1 = con.send(1)
+  const p2 = con.send(2)
+
+  const [id0, id1, id2] = [p0, p1, p2].map(p => Conveyor.getTaskIDByPromise(p)!)
+
+  await vi.advanceTimersByTimeAsync(100)
+
+  expect(await p0).toEqual({ scene: 'done', return_value: 'ok-0' })
+  expect(await p1).toEqual({ scene: 'processor_failure', error: err })
+  expect(await p2).toEqual({ scene: 'done', return_value: 'ok-2' })
+
+  expect(con.getTaskStatus(id0)).toBe('done')
+  expect(con.getTaskStatus(id1)).toBe('failure')
+  expect(con.getTaskStatus(id2)).toBe('done')
+
+  expect(sigWillProcess.mock.calls.map(call => call[0])).toEqual([id0, id1, id2])
+  // 失败任务不应触发 done，成功任务也不应触发 failure
+  expect(sigDone.mock.calls.map(call => call[0])).toEqual([id0, id2])
+  expect(sigFailure).toHaveBeenCalledTimes(1)
+  expect(sigFailure).toHaveBeenCalledWith({ task_id: id1, error: err })
+  // PROCESSED 在成功与失败路径都会触发（对齐 Queue 的 finally 语义）
+  expect(sigProcessed.mock.calls.map(call => call[0])).toEqual([id0, id1, id2])
+})
+
+test('动态调整 Valve：提高立即补位，降低只限制新派发且不打断已在执行的任务', async () => {
+  const started: number[] = []
+
+  const con = Conveyor(async (n: number) => {
+    started.push(n)
+    await sleep(100)
+  })
+
+  con.setValve(1)
+  const tasks = [1, 2, 3, 4, 5].map(n => con.send(n))
+  expect(started).toEqual([1])
+
+  // 提高 Valve 立即补位
+  con.setValve(3)
+  expect(started).toEqual([1, 2, 3])
+
+  // 降低 Valve 不打断已在执行的任务，也不立即补位
+  con.setValve(1)
+  await vi.advanceTimersByTimeAsync(99)
+  expect(started).toEqual([1, 2, 3])
+
+  await vi.advanceTimersByTimeAsync(1)
+  expect(started).toEqual([1, 2, 3, 4])
+  expect(con.getProcessing().map(task => task.payload)).toEqual([4])
+  expect(con.getBlacklogs().map(task => task.payload)).toEqual([5])
+
+  await vi.advanceTimersByTimeAsync(100)
+  expect(started).toEqual([1, 2, 3, 4, 5])
+
+  await vi.advanceTimersByTimeAsync(100)
+  const results = await Promise.all(tasks)
+  expect(results.every(result => result.scene === 'done')).toBe(true)
+})
+
+test('processor 内同步 setValve + 连续 send 的重入不会超发', async () => {
+  const started: number[] = []
+  const inner_promises: Array<Promise<ConveyorSendResult<void>>> = []
+  let active = 0
+  let max_active = 0
+
+  const con = Conveyor<number, void>(async (n) => {
+    started.push(n)
+    active += 1
+    max_active = Math.max(max_active, active)
+
+    if (n === 1) {
+      con.setValve(2)
+      inner_promises.push(con.send(2))
+      inner_promises.push(con.send(3))
+    }
+
+    await sleep(100)
+    active -= 1
+  })
+
+  con.setValve(1)
+  const p1 = con.send(1)
+
+  // 第一个 processor 同步改 Valve 并 send：槽位已被预占，第 3 个任务必须排队
+  expect(started).toEqual([1, 2])
+  expect(con.getProcessing().map(task => task.payload)).toEqual([1, 2])
+  expect(con.getBlacklogs().map(task => task.payload)).toEqual([3])
+
+  const [p2, p3] = inner_promises
+
+  await vi.advanceTimersByTimeAsync(100)
+  expect(await p1).toEqual({ scene: 'done', return_value: undefined })
+  expect(await p2).toEqual({ scene: 'done', return_value: undefined })
+  expect(started).toEqual([1, 2, 3])
+
+  await vi.advanceTimersByTimeAsync(100)
+  expect(await p3).toEqual({ scene: 'done', return_value: undefined })
+  // 重入 send 不能让并发峰值超过 Valve
+  expect(max_active).toBe(2)
+})
+
+test('will_process 内退役积压任务：重入安全，当前出队任务仍会执行', async () => {
+  const processed: number[] = []
+
+  const con = Conveyor<number, void>(async (n) => {
+    processed.push(n)
+    await sleep(10)
+  })
+
+  con.setValve(1)
+  con.signals.sig_processor_will_process.receive(() => {
+    for (const task of [...con.getBlacklogs()]) {
+      if (task.payload % 2 === 1) {
+        con.retireOne(task.id)
+      }
+    }
+  })
+
+  const tasks = Array.from({ length: 10 }, (_, i) => con.send(i))
+  const taskIds = tasks.map(task => Conveyor.getTaskIDByPromise(task)!)
+
+  await vi.advanceTimersByTimeAsync(500)
+
+  const results = await Promise.all(tasks)
+
+  // 1 在 will_process 触发前已经出队，无法在信号里撤回；
+  // 3/5/7/9 还在积压中，可在信号里退役（对齐 Queue WILL_PROCESS + setTasks 的筛选场景）
+  expect(processed).toEqual([0, 1, 2, 4, 6, 8])
+  expect(results.map(result => result.scene)).toEqual([
+    'done', 'done', 'done', 'retired/in_waiting',
+    'done', 'retired/in_waiting', 'done', 'retired/in_waiting',
+    'done', 'retired/in_waiting',
+  ])
+
+  for (const idx of [3, 5, 7, 9]) {
+    expect(con.getTaskStatus(taskIds[idx])).toBe('retired/in_waiting')
+  }
+
+  expect(con.getBlacklogs()).toEqual([])
+  expect(con.getState()).toBe('idle')
+})
+
+test('send 返回前同步调用 processor（固化与 Queue「不会立即执行」相反的语义）', async () => {
+  const called: number[] = []
+
+  const con = Conveyor(async (n: number) => {
+    called.push(n)
+    await sleep(10)
+  })
+
+  const p = con.send(1)
+  expect(called).toEqual([1])
+  expect(con.getProcessing().map(task => task.payload)).toEqual([1])
+
+  await vi.advanceTimersByTimeAsync(10)
+  expect(await p).toEqual({ scene: 'done', return_value: undefined })
+})
+
+test('setValve 校验补齐：NaN / 非数字 / 小数 / -Infinity', () => {
+  const con = Conveyor(async () => {})
+
+  expect(() => con.setValve(NaN)).toThrow(TypeError)
+  expect(() => con.setValve(0.9)).toThrow(TypeError)
+  expect(() => con.setValve('0' as any)).toThrow(TypeError)
+  expect(() => con.setValve(-1)).toThrow(RangeError)
+  // 当前实现先判“非整数”再判负数，因此 -Infinity 抛 TypeError；
+  // 与 concurrency.Valve（先判 v < 0，抛 RangeError）不同，此处只固化 Conveyor 现状
+  expect(() => con.setValve(-Infinity)).toThrow(TypeError)
+  expect(() => con.setValve(0)).not.toThrow()
+  expect(() => con.setValve(Infinity)).not.toThrow()
 })
