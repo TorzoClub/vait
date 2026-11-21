@@ -20,7 +20,7 @@ yarn add vait
 ### ES Module / TypeScript
 
 ```ts
-import { timeout, Sequence, Signal, Wait } from 'vait'
+import { timeout, Executor, Signal, Wait } from 'vait'
 ```
 
 ### CommonJS
@@ -42,7 +42,7 @@ const { timeout, Wait, QueuePool } = require('vait')
 ### 直接从源码引入
 
 ```ts
-import { Sequence } from './src' // 等价于 ./src/index.ts
+import { Executor } from './src' // 等价于 ./src/index.ts
 ```
 
 `src/deprecated/` 和 `src/experimental/` 下的模块不从包入口导出，也不建议直接用于业务代码；边界见 [文档索引](./README.md)。
@@ -62,11 +62,11 @@ import { Sequence } from './src' // 等价于 ./src/index.ts
 
 ## 命名与设计约定
 
-1. **大写开头的是工厂函数**：`Wait()`、`Queue()`、`Signal()`、`Memo()`、`Timer()`、`Conveyor()` 返回对象或元组；`Sequence`、`Concurrent` 直接返回函数。
-2. **小写开头的是普通函数**：`timeout`、`nextTick`、`runTask`、`concurrency`、`concurrentMap`。
+1. **大写开头的是工厂函数**：`Wait()`、`Queue()`、`Signal()`、`Memo()`、`Timer()`、`Conveyor()` 返回对象或元组；`Executor` 直接返回函数。`Sequence`、`Concurrent`（Legacy）也是直接返回函数。
+2. **小写开头的是普通函数**：`timeout`、`nextTick`、`runTask`、`concurrency`（Legacy）、`concurrentMap`（Legacy）。
 3. **元组返回值按位置解构**：`const [waiting, go] = Wait()`、`const [get, set] = Memo(0)`、`const [resolve, reject, promise] = OuterPromise()`。
 4. **注册监听或钩子返回取消函数**：`Signal.receive`、`Signal.once`、`Memo.watch`、`Memo.addValidator`、`Memo.forward` 等都返回 `() => void`。
-5. **错误策略**：队列和任务池里单个任务失败不会中断整体；`Signal.trigger` 默认忽略监听器错误并 `console.warn`，需要抛出时使用 `triggerCareError`；`concurrency` 采用首个错误向外抛出的语义；`Conveyor` 将 processor 的错误作为 `processor_failure` 结果返回，而不是让 `send()` reject。
+5. **错误策略**：队列和任务池里单个任务失败不会中断整体；`Signal.trigger` 默认忽略监听器错误并 `console.warn`，需要抛出时使用 `triggerCareError`；`concurrency`（Legacy）采用首个错误向外抛出的语义；`Conveyor` 将 processor 的错误作为 `processor_failure` 结果返回，而不是让 `send()` reject；`Executor` 会把 `processor_failure` 还原成原始错误 reject。
 6. **`task` 不返回 Promise**：`Queue.task`、`QueuePool.addTask` 返回 `void`；需要结果时使用 `runTask` 或 `Conveyor.send`。
 
 ## 下一步

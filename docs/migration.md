@@ -7,7 +7,10 @@
 ## v5
 
 - **新增 `Conveyor`**：用于长期任务提交、背压、等待 / 处理超时、中断和结构化结果。新代码的任务编排优先使用 [`Conveyor`](./conveyor.md)。
-- **`Queue` / `QueuePool` 归为 Legacy**：源码位于 `src/legacy/`，仍从包入口导出，行为保持，但不再主动增加能力。新代码优先使用 `Conveyor`、`concurrentMap` 或 `concurrency`；现有代码见 [`Queue`](./legacy/queue.md) 与 [`QueuePool`](./legacy/queue-pool.md)。
+- **新增 `Executor`**：基于 `Conveyor` 的 async 函数批处理执行器。默认并发为 1，支持 `concurrency` / `backlogs_limit` / `waiting_timeout` / `processing_timeout` options，以及 `setConcurrency`、`destroy` 和只读 `conveyor`。详见 [`Executor`](./executor.md)。
+- **`Queue` / `QueuePool` 归为 Legacy**：源码位于 `src/legacy/`，仍从包入口导出，行为保持，但不再主动增加能力。新代码优先使用 `Conveyor` 或 `Executor`；现有代码见 [`Queue`](./legacy/queue.md) 与 [`QueuePool`](./legacy/queue-pool.md)。
+- **`Sequence` / `Concurrent` / `concurrency` / `concurrentMap` 归为 Legacy**：源码移动到 `src/legacy/`，文档移动到 [`docs/legacy/sequence.md`](./legacy/sequence.md) 与 [`docs/legacy/concurrency.md`](./legacy/concurrency.md)，仍从包入口导出。新代码使用 `Executor` / `Conveyor`。直接从 `vait/src/...` 深层路径引入的代码需要改到 `vait/src/legacy/...`。
+- **`Conveyor` 实例不可变**：`Conveyor()` 返回的实例与 `signals` 对象已 `Object.freeze`，`ConveyorInstance` 类型改为 `Readonly`。运行时替换实例方法或属性会失败。
 - **`CreateContext` / `Event` 归为 Deprecated**：源码位于 `src/deprecated/`，不再从包入口导出。`import { CreateContext } from 'vait'` 和 `import { Event } from 'vait'` 不可用；详情见 [上下文与事件](./deprecated/context-event.md)。
 - **`OutterPromise` 更名为 `OuterPromise`**：使用旧名称的代码需要更新导入。
 - **Conveyor 结果字段使用 `scene`**：结算结果通过 `scene` 判别，例如 `done`、`overflow`、`processor_failure`、`timeout/in_waiting`、`timeout/in_processing`、`retired/in_waiting`、`retired/in_processing`、`destroyed`。状态字符串也使用路径式名称。

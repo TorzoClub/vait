@@ -1,10 +1,10 @@
 import assert from 'assert'
-import { timeout } from './timeout'
-import { Wait } from './wait'
-import { nextTick } from './next-tick'
-import { Signal } from './signal'
+import { timeout } from '../timeout'
+import { Wait } from '../wait'
+import { nextTick } from '../next-tick'
+import { Signal } from '../signal'
 import { concurrency } from './concurrency'
-import { Memo } from './memo'
+import { Memo } from '../memo'
 
 test('concurrency.Valve', async () => {
   const { get, set } = concurrency.Valve(1)

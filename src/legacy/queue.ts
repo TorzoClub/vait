@@ -3,7 +3,7 @@ import { OuterPromise } from '../outer-promise'
 import { removeByItem } from '../internal/utils'
 import { nextTick } from '../next-tick'
 import { Signal } from '../signal'
-import { concurrency } from '../concurrency'
+import { concurrency } from './concurrency'
 
 export class QueueError extends Error {}
 

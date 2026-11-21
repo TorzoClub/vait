@@ -28,12 +28,14 @@ const data = results.flatMap(result => (
 
 `send` 返回结构化结果；`overflow`、`timeout/*`、`processor_failure` 等场景可以在同一个 `switch` 中处理。
 
-### 限流并发抓取（concurrentMap）
+### 批量执行 async 函数（Executor）
 
-最多 5 个请求同时进行，结果顺序与输入一致。
+`Executor` 内部持有一个 Conveyor；`concurrency` 控制同时执行的 async 函数数量。
 
 ```ts
-import { concurrentMap, timeout } from 'vait'
+import { Executor, timeout } from 'vait'
+
+const execute = Executor({ concurrency: 5 })
 
 async function fetchOne(url: string) {
   await timeout(100) // 模拟网络请求
@@ -42,26 +44,13 @@ async function fetchOne(url: string) {
 
 const urls = Array.from({ length: 20 }, (_, i) => 'https://example.com/' + i)
 
-const results = await concurrentMap(5, urls, (url) => fetchOne(url))
+const results = await Promise.all(
+  urls.map(url => execute(() => fetchOne(url)))
+)
 console.log(results.length) // 20
 ```
 
-### 动态调整并发上限（concurrency.Valve）
-
-```ts
-import { concurrency, timeout } from 'vait'
-
-const valve = concurrency.Valve(2)
-
-const running = concurrency.each(valve, [1, 2, 3, 4, 5, 6, 7, 8], async (n) => {
-  await timeout(50)
-  console.log('done', n)
-})
-
-setTimeout(() => valve.set(8), 100) // 运行中提高并发上限
-
-await running
-```
+需要背压、等待 / 处理超时、销毁或状态查询时，可通过 `execute.conveyor` 直接使用 Conveyor 能力。
 
 ### 可取消的等待与超时保护（Wait / timeout）
 
@@ -112,6 +101,45 @@ console.log(Memo.value(count)) // 5，校验失败不会写入
 cancel()
 ```
 
+## Legacy 示例
+
+以下示例使用 Legacy 模块，仅用于维护现有代码；新代码优先使用 `Conveyor` 或 `Executor`。
+
+### 限流并发抓取（concurrentMap）
+
+最多 5 个请求同时进行，结果顺序与输入一致。
+
+```ts
+import { concurrentMap, timeout } from 'vait'
+
+async function fetchOne(url: string) {
+  await timeout(100) // 模拟网络请求
+  return 'data:' + url
+}
+
+const urls = Array.from({ length: 20 }, (_, i) => 'https://example.com/' + i)
+
+const results = await concurrentMap(5, urls, (url) => fetchOne(url))
+console.log(results.length) // 20
+```
+
+### 动态调整并发上限（concurrency.Valve）
+
+```ts
+import { concurrency, timeout } from 'vait'
+
+const valve = concurrency.Valve(2)
+
+const running = concurrency.each(valve, [1, 2, 3, 4, 5, 6, 7, 8], async (n) => {
+  await timeout(50)
+  console.log('done', n)
+})
+
+setTimeout(() => valve.set(8), 100) // 运行中提高并发上限
+
+await running
+```
+
 ### 串行 + 并发组合（Sequence + concurrentMap）
 
 用 `Sequence` 保证本地写入顺序，用 `concurrentMap` 做远端请求限流。
@@ -139,10 +167,6 @@ for (const content of contents) {
   })
 }
 ```
-
-## Legacy 示例
-
-以下示例使用 Legacy 模块，仅用于维护现有代码；新代码优先使用 `Conveyor`、`concurrentMap` 或 `concurrency`。
 
 ### 带进度与错误上报的队列（Queue）
 

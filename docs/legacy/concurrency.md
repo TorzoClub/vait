@@ -1,4 +1,7 @@
-# 并发控制：concurrency / Valve / each / concurrentMap（Stable）
+# 并发控制：concurrency / Valve / each / concurrentMap（Legacy）
+
+> **Legacy 模块**：`concurrency` / `concurrentMap` 的源码位于 `src/legacy/`，仍从包入口导出，但不再主动演进。
+> 新代码优先使用 [`Executor`](../executor.md) 或 [`Conveyor`](../conveyor.md)。
 
 ```ts
 import { concurrency, concurrentMap, timeout } from 'vait'
@@ -129,7 +132,7 @@ const output = await concurrentMap(5, inputList, async (item, idx, list) => {
 
 ## 相关 API
 
-完整选择见 [文档索引](./README.md) 的 API 选择表。
+完整选择见 [文档索引](../README.md) 的 API 选择表。
 
 ---
 

@@ -1,4 +1,4 @@
-import { Queue, runTask } from './legacy/queue'
+import { Queue, runTask } from './queue'
 
 export const Sequence = (
   q = Queue()

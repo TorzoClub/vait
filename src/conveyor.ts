@@ -77,13 +77,13 @@ type Processor<Payload, ProcessorReturn> = (
   }
 ) => Promise<ProcessorReturn>
 
-type ConveyorSignals<Payload> = {
+type ConveyorSignals<Payload> = Readonly<{
   sig_processor_failure: Signal<{ task_id: TaskID, error: unknown }>
   sig_processor_will_process: Signal<TaskID>
   sig_processor_processed: Signal<TaskID>
   sig_send_before: Signal<Payload>
   sig_processor_done: Signal<TaskID>
-}
+}>
 
 const sym_hook_willProcess = Symbol('sym_hook_willProcess')
 
@@ -94,7 +94,7 @@ type Task<Payload> = {
   [sym_hook_willProcess]: () => void
 }
 
-export type ConveyorInstance<Payload, ProcessorReturn> = {
+export type ConveyorInstance<Payload, ProcessorReturn> = Readonly<{
   setValve(n: number): void
   setBacklogsLimit(n: number): void
   setWaitingTimeout(n: number): void
@@ -114,7 +114,7 @@ export type ConveyorInstance<Payload, ProcessorReturn> = {
   destroy(): void
 
   signals: ConveyorSignals<Payload>
-}
+}>
 
 type Valve = {
   get(): number;
@@ -190,13 +190,13 @@ export function Conveyor<Payload, ProcessorReturn>(
     throw new ConveyorError('Internal', 'This Conveyor is Destored', {})
   })
 
-  const signals: ConveyorSignals<Payload> = {
+  const signals: ConveyorSignals<Payload> = Object.freeze({
     sig_processor_failure: Signal<{ task_id: TaskID, error: unknown }>(),
     sig_processor_will_process: Signal<TaskID>(),
     sig_processor_processed: Signal<TaskID>(),
     sig_send_before: Signal<Payload>(),
     sig_processor_done: Signal<TaskID>(),
-  }
+  })
 
   const waitingTimer = ConveyorTimer<TaskID>()
   const processingTimer = ConveyorTimer<TaskID>()
@@ -482,7 +482,7 @@ export function Conveyor<Payload, ProcessorReturn>(
     setDestroy(true)
   }
 
-  return {
+  return Object.freeze({
     signals,
 
     setValve: WithDestroy(n => {
@@ -537,5 +537,5 @@ export function Conveyor<Payload, ProcessorReturn>(
         return Promise.reject(err)
       }
     }
-  }
+  })
 }

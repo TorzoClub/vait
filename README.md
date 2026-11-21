@@ -2,11 +2,11 @@
 
 异步编程的实用工具集，主要覆盖三类能力：
 
-- **任务编排与并发**：`Conveyor`、`Sequence`、`Concurrent`、`concurrency`、`concurrentMap`
+- **任务编排与并发**：`Conveyor`、`Executor`
 - **Promise 与等待**：`OuterPromise`、`Wait`、`Timer`、`timeout`、`nextTick`
 - **信号与状态**：`Signal`、`Memo`、`WithValidating`、`ChangedSignal`
 
-`Queue`、`QueuePool` 仍从包入口导出，归为 Legacy；`CreateContext`、`Event` 为 Deprecated，不再从入口导出。稳定性定义和完整目录见 [文档索引](./docs/README.md)。
+`Queue`、`QueuePool`、`Sequence`、`Concurrent`、`concurrency`、`concurrentMap` 仍从包入口导出，归为 Legacy；`CreateContext`、`Event` 为 Deprecated，不再从入口导出。稳定性定义和完整目录见 [文档索引](./docs/README.md)。
 
 ## 安装
 
@@ -39,22 +39,24 @@ if (result.scene === 'done') {
 }
 ```
 
-### 并发映射：concurrentMap
+### 批量执行：Executor
 
 ```ts
-import { concurrentMap, timeout } from 'vait'
+import { Executor, timeout } from 'vait'
 
-const list = [1, 2, 3, 4, 5]
+const executor = Executor({ concurrency: 3 })
 
-const result = await concurrentMap(3, list, async (n) => {
-  await timeout(100)
-  return n * 2
-})
+const result = await Promise.all(
+  [1, 2, 3, 4, 5].map(n => executor(async () => {
+    await timeout(100)
+    return n * 2
+  }))
+)
 
 console.log(result) // [2, 4, 6, 8, 10]
 ```
 
-结果顺序与输入一致；同时执行的回调数量不超过 3。
+结果顺序与调用顺序一致；同时执行的 async 函数数量不超过 3。
 
 ### 信号：Signal
 

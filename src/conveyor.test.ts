@@ -1306,3 +1306,22 @@ test('setValve 校验补齐：NaN / 非数字 / 小数 / -Infinity', () => {
   expect(() => con.setValve(0)).not.toThrow()
   expect(() => con.setValve(Infinity)).not.toThrow()
 })
+
+test('Conveyor 实例与 signals 已冻结，避免运行时替换', () => {
+  const con = Conveyor(async () => {})
+
+  expect(Object.isFrozen(con)).toBe(true)
+  expect(Object.isFrozen(con.signals)).toBe(true)
+
+  expect(() => {
+    (con as any).setValve = () => {}
+  }).toThrow(TypeError)
+
+  expect(() => {
+    (con as any).signals = {}
+  }).toThrow(TypeError)
+
+  expect(() => {
+    (con.signals as any).sig_processor_done = null
+  }).toThrow(TypeError)
+})

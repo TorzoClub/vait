@@ -3,8 +3,8 @@
 
 import { vi } from 'vitest'
 import { concurrentMap } from './concurrent-map'
-import { nextTick } from './next-tick'
-import { timeout } from './timeout'
+import { nextTick } from '../next-tick'
+import { timeout } from '../timeout'
 
 test('concurrentMap', async () => {
   const data = 'abcdefghi'.split('')

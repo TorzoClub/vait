@@ -343,6 +343,8 @@ const result = await promise
 
 `Conveyor`、`ConveyorInstance`、`ConveyorSendResult`、`ConveyorState`、`ConveyorError`、`AbortCause`、`TaskStatus`、`RetireResult`。
 
+`ConveyorInstance` 是 `Readonly` 类型，对应的运行时实例也已 `Object.freeze`；不要尝试替换实例方法或属性。
+
 `TaskID` 与 `Task` 是内部类型，没有从包入口导出；信号回调中的 `TaskID` 以 Symbol 形式传递，通常不需要显式标注类型。
 
 ---
@@ -355,6 +357,7 @@ const result = await promise
 - `getBlacklogs()` 返回内部数组引用，外部修改会破坏队列；需要快照时应使用 `[...con.getBlacklogs()]`。
 - `destroy` 后，排队任务状态为 `destroyed`；`getTaskStatus` 仍可查询。
 - 执行中 `retireOne` / `destroy` 会取消 Timer，但不会强制停止 processor；两者都会立即将该任务从正在处理集合中移除（`retireOne` 之后调度器继续派发下一个任务，`destroy` 则清空处理中的任务集合），不会等 processor 的 `.finally`。processor 永不结束也不会继续计入并发上限。
+- `Conveyor()` 返回的实例与 `signals` 对象都已 `Object.freeze`，类型为 `Readonly`；运行时给实例属性赋值会抛出 `TypeError`。内部状态仍通过 `setValve` / `send` / `destroy` 等方法变化。
 - `abort_signal` 不会重放；processor 延迟订阅时仍可能错过中断。
 - `setWaitingTimeout(-1)` / `setProcessingTimeout(-1)` 会取消并移除当前 Timer；之后再改成正数或 `0` 会为已存在任务重新创建 Timer，从启用时刻开始计时。
 - 超时配置是 Conveyor 级别的，会同时影响该实例上所有已存在的 Timer（正数改正数保留各自起点）。
@@ -363,10 +366,12 @@ const result = await promise
 
 ## 与 Legacy 模块的关系
 
-`Queue` / `QueuePool` 已归入 Legacy；完整选择见 [文档索引](./README.md) 的 API 选择表。
+`Queue` / `QueuePool` / `Sequence` / `Concurrent` / `concurrency` / `concurrentMap` 已归入 Legacy；完整选择见 [文档索引](./README.md) 的 API 选择表。
 
+- `Executor` 是 Conveyor 的批处理封装：`Executor()` 内部就是一个并发上限为 1 的 Conveyor，可通过 `setConcurrency`、`destroy` 和只读 `conveyor` 操作；详见 [`Executor`](./executor.md)。
 - `Queue` 提供长期队列、payload 映射和队列信号；没有 `pause()` / `resume()` 方法，暂停派发通过 `setMaxConcurrent(0)`。
 - `QueuePool` 提供按 ID 分组、组内串行和 `pause()` / `resume()`。
+- `Sequence` / `Concurrent` / `concurrency` / `concurrentMap` 的文档位于 `docs/legacy/`。
 - 需要按 key 分组串行时，也可以为每个 key 建一个 `Conveyor`。
 - `Conveyor` 自身没有 `pause` / `resume`，需要暂停派发时把并发上限设为 `0`；它没有 payload 映射表，`send` 的 payload 会直接传给 processor。
 

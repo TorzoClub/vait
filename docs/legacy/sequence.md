@@ -1,4 +1,7 @@
-# 串行执行：Sequence 与 Concurrent（Stable）
+# 串行执行：Sequence 与 Concurrent（Legacy）
+
+> **Legacy 模块**：`Sequence` / `Concurrent` 的源码位于 `src/legacy/`，仍从包入口导出，但不再主动演进。
+> 新代码优先使用 [`Executor`](../executor.md)：它可配置并发、销毁，并直接访问内部 Conveyor。
 
 ```ts
 import { Sequence, Concurrent, timeout } from 'vait'
@@ -42,7 +45,7 @@ sq(async () => { throw new Error('boom') }).catch(() => {})
 await sq(async () => console.log('still works')) // still works
 ```
 
-- `Sequence(q?)` 的 `q` 是普通 `Queue`，与 [src/sequence.ts](../src/sequence.ts) 的签名一致；不传时内部创建一个并发度为 1 的队列。
+- `Sequence(q?)` 的 `q` 是普通 `Queue`，与 [src/legacy/sequence.ts](../../src/legacy/sequence.ts) 的签名一致；不传时内部创建一个并发度为 1 的队列。
 - 公开签名只接受普通 `Queue`：`QueueWithSignal` 需要自行处理类型兼容，`QueueWithPayload` 没有对应的 payload 参数；`Sequence` 本身不额外转发队列信号。需要 payload 映射或队列信号时，应直接使用 `Queue` / `WithPayload` 对应的 API。
 - 任务错误通过 `Sequence` 返回的 Promise 暴露；后续任务不会因前一个任务失败而停止。
 
@@ -81,4 +84,5 @@ run.setMaxConcurrent(5) // 运行中提高并发上限到 5
 **细节**
 
 - 返回的数组顺序对应任务加入顺序；完成顺序由并发决定，不保证。
-- `Concurrent` 基于 `Queue` 实现。`Queue` 已归入 Legacy；`Sequence` 和 `Concurrent` 的公开接口仍按 Stable 维护。需要队列信号、payload 映射或更细的队列控制时，应直接使用 [任务队列](./legacy/queue.md)。
+- `Concurrent` 基于 `Queue` 实现，已随 `Sequence` 一起归入 Legacy。需要队列信号、payload 映射或更细的队列控制时，应直接使用 [任务队列](./queue.md)。
+- 新代码的替代方案是 [`Executor`](../executor.md)：`Executor()` 对应串行，`Executor({ concurrency: n })` 对应 `Concurrent(n)`，`setConcurrency` 对应 `setMaxConcurrent`。
