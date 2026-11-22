@@ -149,11 +149,13 @@ test('destroy 结算排队与执行中任务，并阻止后续调用', async () 
 
   executor.destroy()
 
-  expect(await queued_result).toBeInstanceOf(ConveyorError)
+  const queued_error = await queued_result
+  expect(queued_error).toBeInstanceOf(ConveyorError)
+  expect((queued_error as ConveyorError).cause).toEqual({ scene: 'destroyed/in_waiting' })
 
   const running_error = await running_result
   expect(running_error).toBeInstanceOf(ConveyorError)
-  expect((running_error as ConveyorError).cause).toEqual({ scene: 'destroyed' })
+  expect((running_error as ConveyorError).cause).toEqual({ scene: 'destroyed/in_processing' })
 
   await expect(executor(async () => 3)).rejects.toThrow(ConveyorError)
   expect(() => executor.setConcurrency(2)).toThrow(ConveyorError)

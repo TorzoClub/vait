@@ -126,8 +126,8 @@ test('setBacklogsLimit(Infinity) 允许无限积压', async () => {
   expect(con.getBacklogs()).toHaveLength(100)
 
   con.destroy()
-  const results = await Promise.allSettled(promises)
-  expect(results.every(result => result.status === 'rejected')).toBe(true)
+  const results = await Promise.all(promises)
+  expect(results.every(result => result.scene === 'destroyed/in_waiting')).toBe(true)
 })
 
 test('setBacklogsLimit 参数校验', () => {
@@ -591,16 +591,16 @@ test('sig_processor_will_process 中 destroy：终态后 timer 不再触发', as
   const p = con.send(1)
   const taskId = Conveyor.getTaskIDByPromise(p)!
 
-  expect(await p).toEqual({ scene: 'destroyed' })
-  expect(con.getTaskStatus(taskId)).toBe('destroyed')
+  expect(await p).toEqual({ scene: 'destroyed/in_processing' })
+  expect(con.getTaskStatus(taskId)).toBe('destroyed/in_processing')
 
   await vi.advanceTimersByTimeAsync(100)
 
-  expect(con.getTaskStatus(taskId)).toBe('destroyed')
+  expect(con.getTaskStatus(taskId)).toBe('destroyed/in_processing')
   expect(sigProcessed).toHaveBeenCalledTimes(1)
 })
 
-test('destroy 排队任务状态为 destroyed，processing 任务结算为 destroyed', async () => {
+test('destroy 排队任务结算 destroyed/in_waiting，processing 任务结算 destroyed/in_processing', async () => {
   const con = Conveyor(async () => { await sleep(100) })
 
   const p1 = con.send(1) // 处理中
@@ -612,31 +612,36 @@ test('destroy 排队任务状态为 destroyed，processing 任务结算为 destr
   con.destroy()
   expect(() => con.destroy()).not.toThrow()
 
-  await expect(p2).rejects.toThrow(ConveyorError)
-  expect(con.getTaskStatus(taskId2)).toBe('destroyed')
+  expect(await p2).toEqual({ scene: 'destroyed/in_waiting' })
+  expect(con.getTaskStatus(taskId2)).toBe('destroyed/in_waiting')
 
-  expect(await p1).toEqual({ scene: 'destroyed' })
-  expect(con.getTaskStatus(taskId1)).toBe('destroyed')
+  expect(await p1).toEqual({ scene: 'destroyed/in_processing' })
+  expect(con.getTaskStatus(taskId1)).toBe('destroyed/in_processing')
 
   await vi.advanceTimersByTimeAsync(100)
 })
 
-test('destroy：摧毁传送带，拒绝所有排队任务并抛出错误', async () => {
+test('destroy：排队任务 resolve destroyed/in_waiting，销毁后 send 被拒绝', async () => {
   const con = Conveyor(async () => { await sleep(100) })
 
   const p1 = con.send(1) // 处理中
   const p2 = con.send(2) // 排队中
 
+  const taskId1 = Conveyor.getTaskIDByPromise(p1)!
+  const taskId2 = Conveyor.getTaskIDByPromise(p2)!
+
   con.destroy()
 
-  // p2 因为还在排队，触发了 sig_destroyed 应该直接被 reject
-  await expect(p2).rejects.toThrow(ConveyorError)
+  // 排队任务不再 reject，而是以 destroyed/in_waiting 结算
+  expect(await p2).toEqual({ scene: 'destroyed/in_waiting' })
+  expect(con.getTaskStatus(taskId2)).toBe('destroyed/in_waiting')
 
   // 销毁后再次 send 会直接抛错
   await expect(() => con.send(3)).rejects.toThrow(ConveyorError)
 
   await vi.advanceTimersByTimeAsync(100)
-  await p1 // 正在跑的任务依然会跑完
+  expect(await p1).toEqual({ scene: 'destroyed/in_processing' })
+  expect(con.getTaskStatus(taskId1)).toBe('destroyed/in_processing')
 })
 
 // ============================================================================
@@ -698,7 +703,7 @@ test('send 后同步 destroy：同步订阅 abort 的 processor 能收到中断'
 
   con.destroy()
 
-  expect(await p).toEqual({ scene: 'destroyed' })
+  expect(await p).toEqual({ scene: 'destroyed/in_processing' })
   expect(abortFn).toHaveBeenCalledWith('destroy')
 
   release()
@@ -837,7 +842,7 @@ test('当 Queue 为空且触发 startProcessing 时，应直接返回 (覆盖 ta
   expect(true).toBe(true) // 只要不报错就证明安全退出了
 })
 
-test('destroy 时，执行中的任务立即结算为 destroyed，processor 仍会跑完', async () => {
+test('destroy 时，执行中的任务立即结算为 destroyed/in_processing，processor 仍会跑完', async () => {
   let finished = false
   const sigDone = vi.fn()
   const sigProcessed = vi.fn()
@@ -859,9 +864,9 @@ test('destroy 时，执行中的任务立即结算为 destroyed，processor 仍�
   // 此时调用 destroy，p1 的状态是 processing
   con.destroy()
 
-  // send() 立即结算为 destroyed，而不是继续等 processor
-  expect(await p1).toEqual({ scene: 'destroyed' })
-  expect(con.getTaskStatus(taskId)).toBe('destroyed')
+  // send() 立即结算为 destroyed/in_processing，而不是继续等 processor
+  expect(await p1).toEqual({ scene: 'destroyed/in_processing' })
+  expect(con.getTaskStatus(taskId)).toBe('destroyed/in_processing')
   expect(finished).toBe(false)
 
   // processor 仍会继续跑完；它的最终结果不再触发 done 信号
@@ -869,7 +874,7 @@ test('destroy 时，执行中的任务立即结算为 destroyed，processor 仍�
   expect(finished).toBe(true)
   expect(sigDone).not.toHaveBeenCalled()
   expect(sigProcessed).toHaveBeenCalledTimes(1)
-  expect(con.getTaskStatus(taskId)).toBe('destroyed')
+  expect(con.getTaskStatus(taskId)).toBe('destroyed/in_processing')
 })
 
 test('Timer 的 set 与 unset 边界，以及动态调整的兜底', async () => {
@@ -1027,7 +1032,7 @@ test('getState：destroy 后为 destroyed，getProcessing 抛错', async () => {
   expect(con.getState()).toBe('destroyed')
   expect(() => con.getProcessing()).toThrow(ConveyorError)
 
-  await expect(p).resolves.toEqual({ scene: 'destroyed' })
+  await expect(p).resolves.toEqual({ scene: 'destroyed/in_processing' })
   await vi.advanceTimersByTimeAsync(100)
 })
 

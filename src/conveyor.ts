@@ -30,7 +30,8 @@ export type TaskStatus =
   | 'retired/in_waiting'
   | 'timeout/in_waiting'
   | 'timeout/in_processing'
-  | 'destroyed'
+  | 'destroyed/in_waiting'
+  | 'destroyed/in_processing'
 
 const TERMINAL_STATUSES: ReadonlySet<TaskStatus> = new Set([
   'done',
@@ -39,7 +40,8 @@ const TERMINAL_STATUSES: ReadonlySet<TaskStatus> = new Set([
   'retired/in_waiting',
   'timeout/in_waiting',
   'timeout/in_processing',
-  'destroyed',
+  'destroyed/in_waiting',
+  'destroyed/in_processing',
 ])
 
 export type ConveyorSendResult<ProcessorReturn> =
@@ -50,7 +52,8 @@ export type ConveyorSendResult<ProcessorReturn> =
   | Readonly<{ scene: 'retired/in_processing' }>
   | Readonly<{ scene: 'timeout/in_waiting', elapsed_time: number }>
   | Readonly<{ scene: 'timeout/in_processing', elapsed_time: number }>
-  | Readonly<{ scene: 'destroyed' }>
+  | Readonly<{ scene: 'destroyed/in_waiting' }>
+  | Readonly<{ scene: 'destroyed/in_processing' }>
 
 const __overflow_result: Readonly<{ scene: 'overflow' }> = Object.freeze({ scene: 'overflow' })
 
@@ -282,9 +285,9 @@ export function Conveyor<Payload, ProcessorReturn>(
         abort_signal.trigger('destroy')
         waitingTimer.stop(task.id)
         processingTimer.stop(task.id)
-        setTaskStatus(task.id, 'destroyed')
+        setTaskStatus(task.id, 'destroyed/in_processing')
         triggerDoneSignal(task.id, {
-          scene: 'destroyed'
+          scene: 'destroyed/in_processing'
         })
       })
 
@@ -397,7 +400,7 @@ export function Conveyor<Payload, ProcessorReturn>(
 
       const done_signal = getDoneSignal(task.id)
 
-      const [resolve, reject, promise] = OuterPromise<ConveyorSendResult<ProcessorReturn>>()
+      const [resolve, , promise] = OuterPromise<ConveyorSendResult<ProcessorReturn>>()
 
       setBacklogs([...getBacklogs(), task])
 
@@ -409,14 +412,8 @@ export function Conveyor<Payload, ProcessorReturn>(
       $_cancelDestroyedWatcherInSend = Signal.once(sig_destroyed, () => {
         cancelDoneWatcher()
         waitingTimer.stop(task.id)
-        setTaskStatus(task.id, 'destroyed')
-        reject(
-          new ConveyorError(
-            'Internal',
-            `当前 Conveyor 已经销毁.该任务(task_id=${String(task.id)})将无法处理`,
-            { cause: { task_id: task.id, payload } }
-          )
-        )
+        setTaskStatus(task.id, 'destroyed/in_waiting')
+        resolve({ scene: 'destroyed/in_waiting' })
       })
 
       setTaskStatus(task.id, 'waiting')
@@ -471,7 +468,7 @@ export function Conveyor<Payload, ProcessorReturn>(
 
     for (const task of getBacklogs()) {
       waitingTimer.stop(task.id)
-      setTaskStatus(task.id, 'destroyed')
+      setTaskStatus(task.id, 'destroyed/in_waiting')
     }
 
     waitingTimer.clear()
@@ -500,7 +497,7 @@ export function Conveyor<Payload, ProcessorReturn>(
     getState,
     getTaskStatus(task_id) {
       // getTaskStatus 不能被 WithDestroy 包装
-      // 因为预期会有 destroyed 的 TaskStatus
+      // 因为预期会有 destroyed/* 的 TaskStatus
       const task_status = task_status_pool.get(task_id)
       if (task_status === undefined) {
         throw new ConveyorError('Internal', `Task(task_id=${String(task_id)}) not found`, {

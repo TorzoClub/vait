@@ -72,7 +72,7 @@ Conveyor 实例与 `signals` 都经过 `Object.freeze`，类型为 `Readonly`；
 
 - **任务成功**：resolve task 的返回值。
 - **任务 reject 或同步 throw**：以原始错误 reject，保持拒绝原因 identity；后续任务继续执行。
-- **非成功结算**：当通过 `conveyor` 启用了背压、等待 / 处理超时、retire，或调用了 `destroy` 时，`send` 可能返回 `overflow`、`timeout/*`、`retired/*`、`destroyed`。这些场景会让 `executor(taskFunc)` reject 一个 `ConveyorError`，原始结算结果保存在标准的 `cause` 上：
+- **非成功结算**：当通过 `conveyor` 启用了背压、等待 / 处理超时、retire，或调用了 `destroy` 时，`send` 可能返回 `overflow`、`timeout/*`、`retired/*`、`destroyed/*`。其中 `destroy` 时排队任务为 `destroyed/in_waiting`，执行中任务为 `destroyed/in_processing`。这些场景会让 `executor(taskFunc)` reject 一个 `ConveyorError`，原始结算结果保存在标准的 `cause` 上：
 
 ```ts
 const executor = Executor({ backlogs_limit: 0 })

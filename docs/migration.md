@@ -13,7 +13,7 @@
 - **`Conveyor` 实例不可变**：`Conveyor()` 返回的实例与 `signals` 对象已 `Object.freeze`，`ConveyorInstance` 类型改为 `Readonly`。运行时替换实例方法或属性会失败。
 - **`CreateContext` / `Event` 归为 Deprecated**：源码位于 `src/deprecated/`，不再从包入口导出。`import { CreateContext } from 'vait'` 和 `import { Event } from 'vait'` 不可用；详情见 [上下文与事件](./deprecated/context-event.md)。
 - **`OutterPromise` 更名为 `OuterPromise`**：使用旧名称的代码需要更新导入。
-- **Conveyor 结果字段使用 `scene`**：结算结果通过 `scene` 判别，例如 `done`、`overflow`、`processor_failure`、`timeout/in_waiting`、`timeout/in_processing`、`retired/in_waiting`、`retired/in_processing`、`destroyed`。状态字符串也使用路径式名称。
+- **Conveyor 结果字段使用 `scene`**：结算结果通过 `scene` 判别，例如 `done`、`overflow`、`processor_failure`、`timeout/in_waiting`、`timeout/in_processing`、`retired/in_waiting`、`retired/in_processing`、`destroyed/in_waiting`、`destroyed/in_processing`。状态字符串也使用路径式名称。
 - **包目标调整**：`package.json` 声明 Node.js ≥ 20；Vite 构建目标为 ECMAScript 2023。
 
 > `scene` 字段和路径式状态字符串只影响使用过 v5 预发布版本的代码；从更早版本直接升级时，应以当前文档中的 API 为准。

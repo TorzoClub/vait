@@ -94,11 +94,11 @@ send(payload)
    ├── processor reject ───────► [failure]              ──► send resolve { processor_failure }
    ├── 处理超时 ──────────────► [timeout/in_processing] ──► send resolve { timeout/in_processing }
    ├── retireOne ─────────────► [retired/in_processing] ──► send resolve { retired/in_processing }
-   └── destroy ───────────────► [destroyed]            ──► send resolve { destroyed }
+   └── destroy ───────────────► [destroyed/in_processing] ──► send resolve { destroyed/in_processing }
 
 排队中：
   retireOne / retireOneIgnoreProcessing ──► [retired/in_waiting] ──► send resolve { retired/in_waiting }
-  destroy ───────────────────────────────► send reject（ConveyorError）
+  destroy ───────────────────────────────► [destroyed/in_waiting] ──► send resolve { destroyed/in_waiting }
 ```
 
 ### 任务状态
@@ -115,14 +115,15 @@ send(payload)
 | `timeout/in_processing` | 执行阶段超时 | 处理超时触发 |
 | `retired/in_waiting` | 排队阶段被主动退役 | `retireOne` / `retireOneIgnoreProcessing` 移出积压 |
 | `retired/in_processing` | 执行中被退役，processor 仍在运行 | 对执行中任务调用 `retireOne` |
-| `destroyed` | 排队中或执行中遭遇 `destroy` | `destroy` 时仍在排队或处理的任务 |
+| `destroyed/in_waiting` | 排队阶段遭遇 `destroy` | `destroy` 时仍在积压 |
+| `destroyed/in_processing` | 执行阶段遭遇 `destroy` | `destroy` 时仍在处理 |
 
 注意：
 
-- 终态集合：`failure`、`done`、`retired/in_processing`、`retired/in_waiting`、`timeout/in_waiting`、`timeout/in_processing`、`destroyed`。一旦进入终态，**状态不会再被任何路径改写**。
-- `retired/in_processing` 与 `destroyed` 是终态，但 processor 可能仍在运行；processor 后续的返回/异常会被忽略，不会再改状态或触发 `sig_processor_done` / `sig_processor_failure`。
-- `destroy` 时仍在排队的任务会被拒绝，状态置为 `destroyed`，并清空 backlog。
-- `destroy` 之后仍可调用 `getTaskStatus` 查询终态；其他被 `WithDestroy` 包裹的方法仍会抛 `ConveyorError`。
+- 终态集合：`failure`、`done`、`retired/in_processing`、`retired/in_waiting`、`timeout/in_waiting`、`timeout/in_processing`、`destroyed/in_waiting`、`destroyed/in_processing`。一旦进入终态，**状态不会再被任何路径改写**。
+- `retired/in_processing` 与 `destroyed/in_processing` 是终态，但 processor 可能仍在运行；processor 后续的返回/异常会被忽略，不会再改状态或触发 `sig_processor_done` / `sig_processor_failure`。
+- `destroy` 时仍在排队的任务状态为 `destroyed/in_waiting`，`send` resolve `{ scene: 'destroyed/in_waiting' }`，并清空 backlog。
+- `destroy` 之后仍可调用 `getTaskStatus` 查询 `destroyed/*` 终态；其他被 `WithDestroy` 包裹的方法仍会抛 `ConveyorError`。
 
 ### send 的结果
 
@@ -135,12 +136,13 @@ send(payload)
 | `processor_failure` | processor 抛错 / reject | `error` |
 | `retired/in_waiting` | 排队阶段被退役 | 无 |
 | `retired/in_processing` | 执行中被退役 | 无 |
-| `destroyed` | 执行中遭遇 `destroy` | 无 |
+| `destroyed/in_waiting` | 排队阶段遭遇 `destroy` | 无 |
+| `destroyed/in_processing` | 执行阶段遭遇 `destroy` | 无 |
 | `timeout/in_waiting` | 排队超时 | `elapsed_time` |
 | `timeout/in_processing` | 处理超时 | `elapsed_time` |
 
 - **processor 抛错不会让 `send()` reject**，而是以 `{ scene: 'processor_failure', error }` 返回；这样调用方可以统一用 `switch` 处理。processor 是同步调用的，即使它同步抛错也会被转换成 `processor_failure`。
-- 正常使用下，`send()` 只在 Conveyor 已经销毁时 reject（拒绝值是 `ConveyorError`）。
+- 正常使用下，只有 `destroy` 之后**新发起**的 `send()` 会 reject（拒绝值是 `ConveyorError`）；销毁时已经在排队或处理的任务会通过 `destroyed/in_waiting` / `destroyed/in_processing` 场景 resolve。
 - `overflow` 是同步判断后立即返回的结果，不会创建任务，也不会触发后续 processor 信号。
 
 ---
@@ -197,7 +199,7 @@ const con = Conveyor(async (url: string, { id, abort_signal }) => {
 
 - `abort_signal` 是**通知**，不是强制取消。Conveyor 不会代替 processor 终止任务，也不会等待 processor 响应；processor 需要自行监听并尽快结束。
 - 只对执行中的任务触发；排队阶段的任务被退役 / 超时时不会调用 processor，因此也没有中断信号。
-- 处理超时后，processor 的最终结果会被忽略。销毁后，processor 仍会继续运行，但它的最终结果不再用于结算 `send()`（此时 `send()` 已经返回 `destroyed`）。
+- 处理超时后，processor 的最终结果会被忽略。销毁后，processor 仍会继续运行，但它的最终结果不再用于结算 `send()`（此时 `send()` 已经返回 `destroyed/in_processing`）。
 - processor 是同步调用的：如果它在调用过程中同步订阅了 `abort_signal`，`send()` 返回后再调用 `destroy` / `retireOne` 能正常收到中断。
 - `abort_signal` **不会重放**。如果 processor 在 `await` 之后才订阅，或在 `sig_processor_will_process` 监听器里提前销毁/退役，processor 仍可能错过中断；此时它仍会启动并运行。
 
@@ -231,9 +233,9 @@ const con = Conveyor(async (url: string, { id, abort_signal }) => {
 
 销毁整个 Conveyor：
 
-- 排队中的任务：取消 waiting Timer，状态置为 `destroyed`，从 backlog 移除；`send()` 以 `ConveyorError` 拒绝。
-- 执行中的任务：取消 processing / waiting Timer，收到 `'destroy'` 中断，状态置为 `destroyed`；`send()` 立即以 `{ scene: 'destroyed' }` 结算，但 processor 会继续运行到结束，其最终结果被忽略。
-- 销毁后：`send` 返回 rejected Promise；`setValve` / `setBacklogsLimit` / 两个超时 setter / `getBacklogs` / `retireOne*` 都会同步抛出 `ConveyorError`；`getTaskStatus` 仍可调用，用于查询 `destroyed` 状态；`signals` 仍可访问。
+- 排队中的任务：取消 waiting Timer，状态置为 `destroyed/in_waiting`，从 backlog 移除；`send()` 立即以 `{ scene: 'destroyed/in_waiting' }` 结算。
+- 执行中的任务：取消 processing / waiting Timer，收到 `'destroy'` 中断，状态置为 `destroyed/in_processing`；`send()` 立即以 `{ scene: 'destroyed/in_processing' }` 结算，但 processor 会继续运行到结束，其最终结果被忽略。
+- 销毁后：新发起的 `send` 返回 rejected Promise；`setValve` / `setBacklogsLimit` / 两个超时 setter / `getBacklogs` / `retireOne*` 都会同步抛出 `ConveyorError`；`getTaskStatus` 仍可调用，用于查询 `destroyed/*` 状态；`signals` 仍可访问。
 - 销毁不可逆。需要继续投递任务时，应新建一个 Conveyor。
 
 ```ts
@@ -259,7 +261,7 @@ await con.send(1).catch(err => {
 
 不在上述时机的场景：
 
-- 排队退役、等待超时、`destroy` 掉排队任务：只结算 `send()`（前两者 resolve，`destroy` 为 reject），不会触发 `sig_processor_processed`。
+- 排队退役、等待超时、`destroy` 掉排队任务：只结算 `send()`（都会 resolve），不会触发 `sig_processor_processed`。
 - 处理超时：不会触发 `sig_processor_processed`，也不会触发 `sig_processor_failure`（即使 processor 之后抛错）。
 - 执行中退役 / 销毁：`send()` 已在退役/销毁时结算；processor 后续的 resolve / reject 会被忽略，不会触发 `sig_processor_done` / `sig_processor_failure`，但 processor 真正结束时仍会触发 `sig_processor_processed`。
 
@@ -353,7 +355,7 @@ const result = await promise
 - `setWaitingTimeout(Infinity)` / `setProcessingTimeout(Infinity)` 会抛 `TypeError`；超时只接受安全整数（`-1` 或 `>= 0`）。
 - `setBacklogsLimit(0)` 会让所有 `send` 溢出，即使当前没有任务在执行。
 - `getBacklogs()` 返回内部数组引用，外部修改会破坏队列；需要快照时应使用 `[...con.getBacklogs()]`。
-- `destroy` 后，排队任务状态为 `destroyed`；`getTaskStatus` 仍可查询。
+- `destroy` 后，排队任务状态为 `destroyed/in_waiting`，执行中任务状态为 `destroyed/in_processing`；`getTaskStatus` 仍可查询。
 - 执行中 `retireOne` / `destroy` 会取消 Timer，但不会强制停止 processor；两者都会立即将该任务从正在处理集合中移除（`retireOne` 之后调度器继续派发下一个任务，`destroy` 则清空处理中的任务集合），不会等 processor 的 `.finally`。processor 永不结束也不会继续计入并发上限。
 - `Conveyor()` 返回的实例与 `signals` 对象都已 `Object.freeze`，类型为 `Readonly`；运行时给实例属性赋值会抛出 `TypeError`。内部状态仍通过 `setValve` / `send` / `destroy` 等方法变化。
 - `abort_signal` 不会重放；processor 延迟订阅时仍可能错过中断。
