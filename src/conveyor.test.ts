@@ -1,5 +1,5 @@
 import { test, expect, vi, beforeEach, afterEach } from 'vitest'
-import { Conveyor, ConveyorError, ConveyorInstance, type ConveyorSendResult } from './conveyor' // 请替换为你的实际导出路径
+import { Conveyor, ConveyorError, ConveyorInstance, type AbortCause, type ConveyorSendResult } from './conveyor' // 请替换为你的实际导出路径
 import { timeout } from './timeout'
 
 // 每次测试前开启假定时器
@@ -569,6 +569,35 @@ test('retireOne 执行中任务会取消 processing timer，终态不被超时�
   // 工位已在 retire 时释放；processor 真正结束后仍会触发 processed
   await vi.advanceTimersByTimeAsync(500)
   expect(sigProcessed).toHaveBeenCalledTimes(1)
+})
+
+test('retireOne 执行中任务后 destroy 不再触发 abort_signal', async () => {
+  const abort_calls: AbortCause[] = []
+  let release_processor!: () => void
+
+  const con = Conveyor(async (_, { abort_signal }) => {
+    abort_signal.receive(cause => abort_calls.push(cause))
+    await new Promise<void>(resolve => {
+      release_processor = resolve
+    })
+  })
+
+  const p = con.send(1)
+  const task_id = Conveyor.getTaskIDByPromise(p)!
+
+  expect(con.getTaskStatus(task_id)).toBe('processing')
+
+  expect(con.retireOne(task_id)).toEqual({ scene: 'in_processing' })
+  expect(await p).toEqual({ scene: 'retired/in_processing' })
+  expect(abort_calls).toEqual(['outside'])
+
+  con.destroy()
+  expect(abort_calls).toEqual(['outside'])
+  expect(con.getTaskStatus(task_id)).toBe('retired/in_processing')
+
+  release_processor()
+  await vi.advanceTimersByTimeAsync(0)
+  expect(abort_calls).toEqual(['outside'])
 })
 
 test('sig_processor_will_process 中 destroy：终态后 timer 不再触发', async () => {

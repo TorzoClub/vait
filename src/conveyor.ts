@@ -220,13 +220,13 @@ export function Conveyor<Payload, ProcessorReturn>(
   function taskIsProcessing(task_id: TaskID) {
     return 'processing' === task_status_pool.get(task_id)
   }
-  function setTaskStatus(task_id: TaskID, status: TaskStatus): TaskStatus {
+  function taskIsTerminalStatus(task_id: TaskID) {
+    return isTerminalStatus(task_status_pool.get(task_id))
+  }
+  function setTaskStatus(task_id: TaskID, status: TaskStatus): void {
     const current_status = task_status_pool.get(task_id)
-    if (isTerminalStatus(current_status)) {
-      return current_status as TaskStatus
-    } else {
+    if (!isTerminalStatus(current_status)) {
       task_status_pool.set(task_id, status)
-      return status
     }
   }
 
@@ -282,19 +282,19 @@ export function Conveyor<Payload, ProcessorReturn>(
       setTaskStatus(task.id, 'processing')
 
       const cancelDestroyedWatcher = Signal.once(sig_destroyed, () => {
-        abort_signal.trigger('destroy')
-        waitingTimer.stop(task.id)
-        processingTimer.stop(task.id)
-        setTaskStatus(task.id, 'destroyed/in_processing')
-        triggerDoneSignal(task.id, {
-          scene: 'destroyed/in_processing'
-        })
+        if (!taskIsTerminalStatus(task.id)) {
+          abort_signal.trigger('destroy')
+          waitingTimer.stop(task.id)
+          processingTimer.stop(task.id)
+          setTaskStatus(task.id, 'destroyed/in_processing')
+          triggerDoneSignal(task.id, { scene: 'destroyed/in_processing' })
+        }
       })
 
       const [isProcessingTimeout, setProcessingTimeout] = Memo(false)
 
       processingTimer.mount(task.id, (elapsed_time) => {
-        if (!isTerminalStatus(task_status_pool.get(task.id))) {
+        if (!taskIsTerminalStatus(task.id)) {
           setProcessingTimeout(true)
 
           cancelDestroyedWatcher()
@@ -421,7 +421,7 @@ export function Conveyor<Payload, ProcessorReturn>(
       setTaskIDByPromise(promise, task.id)
 
       waitingTimer.mount(task.id, (elapsed_time) => {
-        if (!isTerminalStatus(task_status_pool.get(task.id))) {
+        if (!taskIsTerminalStatus(task.id)) {
           const rm_result = removeBacklogTask(task.id)
           if (rm_result === 'removed') {
             cancelDoneWatcher()
@@ -495,9 +495,10 @@ export function Conveyor<Payload, ProcessorReturn>(
     getBacklogs: WithDestroy(getBacklogs),
     getProcessing: WithDestroy(getProcessing),
     getState,
+
+    // getTaskStatus 不能被 WithDestroy 包装
+    // 因为预期会有 destroyed/* 的 TaskStatus
     getTaskStatus(task_id) {
-      // getTaskStatus 不能被 WithDestroy 包装
-      // 因为预期会有 destroyed/* 的 TaskStatus
       const task_status = task_status_pool.get(task_id)
       if (task_status === undefined) {
         throw new ConveyorError('Internal', `Task(task_id=${String(task_id)}) not found`, {

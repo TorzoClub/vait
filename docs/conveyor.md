@@ -220,6 +220,7 @@ const con = Conveyor(async (url: string, { id, abort_signal }) => {
 **执行中退役的注意点**：
 
 - `retireOne` 会取消该任务的 waiting 与 processing Timer，立即把 `send()` 结算成 `retired/in_processing`，状态写为 `retired/in_processing`（终态）。
+- 执行中任务被退役后，状态已进入 `retired/in_processing`；之后再调用 `destroy()` 不会再向该 processor 的 `abort_signal` 触发 `'destroy'`，它只会收到本次 `'outside'`。
 - 该任务会立即从正在处理集合中移除；processor 仍可在后台继续运行，但不再计入并发上限，调度器会继续派发下一个任务。
 - 被退役但尚未结束的 processor 不再计入并发上限，因此实际同时运行的 processor 数量可能短暂超过 `valve`。
 - processor 之后的返回或异常会被忽略，不会触发 `sig_processor_done` / `sig_processor_failure`，只在 processor 真正结束时触发 `sig_processor_processed`。
