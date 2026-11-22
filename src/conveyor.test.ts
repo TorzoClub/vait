@@ -123,7 +123,7 @@ test('setBacklogsLimit(Infinity) 允许无限积压', async () => {
   con.setBacklogsLimit(Infinity)
 
   const promises = Array.from({ length: 100 }, (_, i) => con.send(i))
-  expect(con.getBlacklogs()).toHaveLength(100)
+  expect(con.getBacklogs()).toHaveLength(100)
 
   con.destroy()
   const results = await Promise.allSettled(promises)
@@ -134,7 +134,9 @@ test('setBacklogsLimit 参数校验', () => {
   const con = Conveyor(async () => {})
 
   expect(() => con.setBacklogsLimit(-1)).toThrow(RangeError)
+  expect(() => con.setBacklogsLimit(-1)).toThrow('backlogs_limit should >= 0')
   expect(() => con.setBacklogsLimit(1.5)).toThrow(TypeError)
+  expect(() => con.setBacklogsLimit(1.5)).toThrow('backlogs_limit should be integer or Infinity')
   expect(() => con.setBacklogsLimit(NaN)).toThrow(TypeError)
   expect(() => con.setBacklogsLimit(Infinity)).not.toThrow()
 })
@@ -713,10 +715,11 @@ test('destroy 之后，所有 API 调用都会被 Guard 拦截', async () => {
 
   // 测试所有被 WithDestroy 包裹的 API
   expect(() => con.setValve(2)).toThrow(ConveyorError)
+  expect(() => con.setValve(2)).toThrow('This Conveyor is destroyed')
   expect(() => con.setBacklogsLimit(10)).toThrow(ConveyorError)
   expect(() => con.setWaitingTimeout(100)).toThrow(ConveyorError)
   expect(() => con.setProcessingTimeout(100)).toThrow(ConveyorError)
-  expect(() => con.getBlacklogs()).toThrow(ConveyorError)
+  expect(() => con.getBacklogs()).toThrow(ConveyorError)
   expect(() => con.getTaskStatus(Symbol('fake') as any)).toThrow(ConveyorError)
   expect(() => con.retireOne(Symbol('fake') as any)).toThrow(ConveyorError)
   expect(() => con.retireOneIgnoreProcessing(Symbol('fake') as any)).toThrow(ConveyorError)
@@ -994,7 +997,7 @@ test('getState：backlog 满时为 working/swamped', async () => {
   const p1 = con.send(1)
   const p2 = con.send(2)
 
-  expect(con.getBlacklogs()).toHaveLength(1)
+  expect(con.getBacklogs()).toHaveLength(1)
   expect(con.getState()).toBe('working/swamped')
 
   await vi.advanceTimersByTimeAsync(200)
@@ -1109,7 +1112,7 @@ test('队列排空与 FIFO：valve=3 下 50 个任务按 send 顺序出队并全
   })
 
   // 排空后回到 idle（Queue ALL_DONE + getStatus('pause') 的可观察等价）
-  expect(con.getBlacklogs()).toEqual([])
+  expect(con.getBacklogs()).toEqual([])
   expect(con.getProcessing()).toEqual([])
   expect(con.getState()).toBe('idle')
 })
@@ -1184,7 +1187,7 @@ test('动态调整 Valve：提高立即补位，降低只限制新派发且不�
   await vi.advanceTimersByTimeAsync(1)
   expect(started).toEqual([1, 2, 3, 4])
   expect(con.getProcessing().map(task => task.payload)).toEqual([4])
-  expect(con.getBlacklogs().map(task => task.payload)).toEqual([5])
+  expect(con.getBacklogs().map(task => task.payload)).toEqual([5])
 
   await vi.advanceTimersByTimeAsync(100)
   expect(started).toEqual([1, 2, 3, 4, 5])
@@ -1221,7 +1224,7 @@ test('processor 内同步 setValve + 连续 send 的重入不会超发', async (
   // 第一个 processor 同步改 Valve 并 send：槽位已被预占，第 3 个任务必须排队
   expect(started).toEqual([1, 2])
   expect(con.getProcessing().map(task => task.payload)).toEqual([1, 2])
-  expect(con.getBlacklogs().map(task => task.payload)).toEqual([3])
+  expect(con.getBacklogs().map(task => task.payload)).toEqual([3])
 
   const [p2, p3] = inner_promises
 
@@ -1246,7 +1249,7 @@ test('will_process 内退役积压任务：重入安全，当前出队任务仍�
 
   con.setValve(1)
   con.signals.sig_processor_will_process.receive(() => {
-    for (const task of [...con.getBlacklogs()]) {
+    for (const task of [...con.getBacklogs()]) {
       if (task.payload % 2 === 1) {
         con.retireOne(task.id)
       }
@@ -1273,7 +1276,7 @@ test('will_process 内退役积压任务：重入安全，当前出队任务仍�
     expect(con.getTaskStatus(taskIds[idx])).toBe('retired/in_waiting')
   }
 
-  expect(con.getBlacklogs()).toEqual([])
+  expect(con.getBacklogs()).toEqual([])
   expect(con.getState()).toBe('idle')
 })
 

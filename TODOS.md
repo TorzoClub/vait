@@ -14,8 +14,8 @@
 
 ## API 命名与类型导出（P3）
 
-- [ ] `getBlacklogs` 拼写统一为 `backlogs`。这涉及公开方法名，需要按破坏性变更处理：新增新名并弃用旧名，或留到下一个大版本。
-- [ ] `ConveyorError` 文案 `'This Conveyor is Destored'` 改为 `'This Conveyor is destroyed'`。
+- [x] Conveyor 积压 API 拼写统一为 `backlogs`（`getBacklogs`；未发布，直接改名）。
+- [x] `ConveyorError` 文案修正为 `'This Conveyor is destroyed'`。
 - [ ] 导出 `TaskID`、`Task`（或改成公开命名），让使用者在声明层能命名这些类型；`TaskStatus`、`RetireResult` 已导出。同时检查 `Conveyor.getTaskIDByPromise` 的返回类型。
 - [ ] 验收：`npm run runtsc`、`npm test` 通过；破坏性变更写入变更日志。
 

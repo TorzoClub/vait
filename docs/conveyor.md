@@ -233,7 +233,7 @@ const con = Conveyor(async (url: string, { id, abort_signal }) => {
 
 - 排队中的任务：取消 waiting Timer，状态置为 `destroyed`，从 backlog 移除；`send()` 以 `ConveyorError` 拒绝。
 - 执行中的任务：取消 processing / waiting Timer，收到 `'destroy'` 中断，状态置为 `destroyed`；`send()` 立即以 `{ scene: 'destroyed' }` 结算，但 processor 会继续运行到结束，其最终结果被忽略。
-- 销毁后：`send` 返回 rejected Promise；`setValve` / `setBacklogsLimit` / 两个超时 setter / `getBlacklogs` / `retireOne*` 都会同步抛出 `ConveyorError`；`getTaskStatus` 仍可调用，用于查询 `destroyed` 状态；`signals` 仍可访问。
+- 销毁后：`send` 返回 rejected Promise；`setValve` / `setBacklogsLimit` / 两个超时 setter / `getBacklogs` / `retireOne*` 都会同步抛出 `ConveyorError`；`getTaskStatus` 仍可调用，用于查询 `destroyed` 状态；`signals` 仍可访问。
 - 销毁不可逆。需要继续投递任务时，应新建一个 Conveyor。
 
 ```ts
@@ -304,13 +304,11 @@ const processing = con.getProcessing()
 - 不包含 `retired/in_processing`：`retireOne` 会立即将该任务从正在处理集合中移除，processor 可能仍在后台运行。
 - 处理超时后立即移除（processor 之后结束不会重新加入）。
 - 返回的是数组快照，不是内部 Set。
-- 与 `getBlacklogs()` 一样被 `WithDestroy` 包装；destroy 后调用会抛 `ConveyorError`。
+- 与 `getBacklogs()` 一样被 `WithDestroy` 包装；destroy 后调用会抛 `ConveyorError`。
 
-### getBlacklogs()
+### getBacklogs()
 
 返回当前积压中的任务数组（不包含正在处理的任务）。元素带有内部字段，**只读使用**，不要修改数组或任务对象；返回的是内部数组引用，直接 `push` / `splice` 会破坏内部状态。
-
-> API 名称保留现有拼写 `getBlacklogs`。
 
 ### getTaskStatus(id)
 
@@ -354,7 +352,7 @@ const result = await promise
 - `setValve(Infinity)` 合法，表示不限制并发；`setBacklogsLimit(Infinity)` 合法，表示无限积压。
 - `setWaitingTimeout(Infinity)` / `setProcessingTimeout(Infinity)` 会抛 `TypeError`；超时只接受安全整数（`-1` 或 `>= 0`）。
 - `setBacklogsLimit(0)` 会让所有 `send` 溢出，即使当前没有任务在执行。
-- `getBlacklogs()` 返回内部数组引用，外部修改会破坏队列；需要快照时应使用 `[...con.getBlacklogs()]`。
+- `getBacklogs()` 返回内部数组引用，外部修改会破坏队列；需要快照时应使用 `[...con.getBacklogs()]`。
 - `destroy` 后，排队任务状态为 `destroyed`；`getTaskStatus` 仍可查询。
 - 执行中 `retireOne` / `destroy` 会取消 Timer，但不会强制停止 processor；两者都会立即将该任务从正在处理集合中移除（`retireOne` 之后调度器继续派发下一个任务，`destroy` 则清空处理中的任务集合），不会等 processor 的 `.finally`。processor 永不结束也不会继续计入并发上限。
 - `Conveyor()` 返回的实例与 `signals` 对象都已 `Object.freeze`，类型为 `Readonly`；运行时给实例属性赋值会抛出 `TypeError`。内部状态仍通过 `setValve` / `send` / `destroy` 等方法变化。

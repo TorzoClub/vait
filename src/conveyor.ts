@@ -104,7 +104,7 @@ export type ConveyorInstance<Payload, ProcessorReturn> = Readonly<{
 
   send(payload: Payload): Promise<ConveyorSendResult<ProcessorReturn>>
 
-  getBlacklogs(): Task<Payload>[]
+  getBacklogs(): Task<Payload>[]
   getProcessing(): Task<Payload>[]
 
   getTaskStatus(id: TaskID): TaskStatus
@@ -154,17 +154,17 @@ function Guard(
 
 const conveyor_defaults = Object.freeze({
   valve: 1,
-  blacklogs_limit: Infinity,
+  backlogs_limit: Infinity,
   waiting_time: -1,
   processing_time: -1,
 })
 
 function assertBacklogsLimit(v: number) {
   if (v !== Infinity && !Number.isInteger(v)) {
-    throw new TypeError('blacklogs_limit should be integer or Infinity')
+    throw new TypeError('backlogs_limit should be integer or Infinity')
   }
   if (v < 0) {
-    throw new RangeError('blacklogs_limit should >= 0')
+    throw new RangeError('backlogs_limit should >= 0')
   }
 }
 
@@ -187,7 +187,7 @@ export function Conveyor<Payload, ProcessorReturn>(
   })
   const [isDestroy, setDestroy] = destroyMemo as [ () => boolean, (b: true) => void ]
   const WithDestroy = Guard(isDestroy)(() => {
-    throw new ConveyorError('Internal', 'This Conveyor is Destored', {})
+    throw new ConveyorError('Internal', 'This Conveyor is destroyed', {})
   })
 
   const signals: ConveyorSignals<Payload> = Object.freeze({
@@ -202,9 +202,9 @@ export function Conveyor<Payload, ProcessorReturn>(
   const processingTimer = ConveyorTimer<TaskID>()
 
   const valve = Valve(conveyor_defaults.valve)
-  const [getBlacklogsLimit, setBlacklogsLimit] = Memo(conveyor_defaults.blacklogs_limit)
-  const blacklogsMemo = Memo<Task<Payload>[]>([])
-  const [getBlacklogs, setBlacklogs] = blacklogsMemo
+  const [getBacklogsLimit, setBacklogsLimitMemo] = Memo(conveyor_defaults.backlogs_limit)
+  const backlogsMemo = Memo<Task<Payload>[]>([])
+  const [getBacklogs, setBacklogs] = backlogsMemo
 
   const task_done_pool = new WeakMap<TaskID, Signal<ConveyorSendResult<ProcessorReturn>>>()
   function triggerDoneSignal(task_id: TaskID, result: ConveyorSendResult<ProcessorReturn>) {
@@ -251,7 +251,7 @@ export function Conveyor<Payload, ProcessorReturn>(
     if (isDestroy()) { return }
 
     const concurrency = valve.get()
-    const tasks = getBlacklogs()
+    const tasks = getBacklogs()
 
     if (tasks.length === 0) { return }
 
@@ -265,7 +265,7 @@ export function Conveyor<Payload, ProcessorReturn>(
     if (!(can_start_count > 0)) { return }
 
     const will_process_tasks = tasks.slice(0, can_start_count)
-    setBlacklogs(tasks.slice(can_start_count))
+    setBacklogs(tasks.slice(can_start_count))
 
     // 先占槽位，避免 processor 同步触发 startProcessing 时超发
     for (const task of will_process_tasks) {
@@ -362,7 +362,7 @@ export function Conveyor<Payload, ProcessorReturn>(
   }
 
   function isSwamped() {
-    return getBlacklogs().length >= getBlacklogsLimit()
+    return getBacklogs().length >= getBacklogsLimit()
   }
 
   function getState(): ConveyorState {
@@ -399,7 +399,7 @@ export function Conveyor<Payload, ProcessorReturn>(
 
       const [resolve, reject, promise] = OuterPromise<ConveyorSendResult<ProcessorReturn>>()
 
-      setBlacklogs([...getBlacklogs(), task])
+      setBacklogs([...getBacklogs(), task])
 
       const cancelDoneWatcher = Signal.once(done_signal, (r) => {
         waitingTimer.stop(task.id)
@@ -425,7 +425,7 @@ export function Conveyor<Payload, ProcessorReturn>(
 
       waitingTimer.mount(task.id, (elapsed_time) => {
         if (!isTerminalStatus(task_status_pool.get(task.id))) {
-          const rm_result = removeBlacklogTask(task.id)
+          const rm_result = removeBacklogTask(task.id)
           if (rm_result === 'removed') {
             cancelDoneWatcher()
             $_cancelDestroyedWatcherInSend()
@@ -441,21 +441,21 @@ export function Conveyor<Payload, ProcessorReturn>(
     }
   })
 
-  function removeBlacklogTask(will_remove_task_id: TaskID): 'not_found' | 'removed' {
-    const [removed_idx, removed_blacklogs] = removeItem(
-      getBlacklogs(),
+  function removeBacklogTask(will_remove_task_id: TaskID): 'not_found' | 'removed' {
+    const [removed_idx, removed_backlogs] = removeItem(
+      getBacklogs(),
       task => will_remove_task_id === task.id
     )
     if (removed_idx === -1) {
       return 'not_found'
     } else {
-      setBlacklogs(removed_blacklogs)
+      setBacklogs(removed_backlogs)
       return 'removed'
     }
   }
 
   function retireOneWithoutProcessing(will_remove_task_id: TaskID): Exclude<RetireResult, { scene: 'in_processing' }> {
-    const rm_result = removeBlacklogTask(will_remove_task_id)
+    const rm_result = removeBacklogTask(will_remove_task_id)
     if (rm_result === 'not_found') {
       return { scene: 'not_found' }
     } else {
@@ -469,7 +469,7 @@ export function Conveyor<Payload, ProcessorReturn>(
   function destroyConveyor() {
     if (isDestroy()) { return }
 
-    for (const task of getBlacklogs()) {
+    for (const task of getBacklogs()) {
       waitingTimer.stop(task.id)
       setTaskStatus(task.id, 'destroyed')
     }
@@ -478,7 +478,7 @@ export function Conveyor<Payload, ProcessorReturn>(
     processingTimer.clear()
     processing_slots.clear()
 
-    setBlacklogs([])
+    setBacklogs([])
     setDestroy(true)
   }
 
@@ -491,11 +491,11 @@ export function Conveyor<Payload, ProcessorReturn>(
     }),
     setBacklogsLimit: WithDestroy(n => {
       assertBacklogsLimit(n)
-      setBlacklogsLimit(n)
+      setBacklogsLimitMemo(n)
     }),
     setWaitingTimeout: WithDestroy(waitingTimer.setTimeout),
     setProcessingTimeout: WithDestroy(processingTimer.setTimeout),
-    getBlacklogs: WithDestroy(getBlacklogs),
+    getBacklogs: WithDestroy(getBacklogs),
     getProcessing: WithDestroy(getProcessing),
     getState,
     getTaskStatus(task_id) {
