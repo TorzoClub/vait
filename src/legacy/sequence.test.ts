@@ -1,6 +1,6 @@
 import { Sequence } from './sequence'
-import { timeout } from './timeout'
-import { Wait } from './wait'
+import { timeout } from '../timeout'
+import { Wait } from '../wait'
 
 test('Serial', async () => {
   const sq = Sequence()

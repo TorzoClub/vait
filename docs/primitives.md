@@ -1,8 +1,8 @@
-# 基础异步原语
+# 基础异步原语（Stable）
 
 ```ts
 import {
-  OutterPromise,
+  OuterPromise,
   Wait, WaitingRejected,
   nextTick,
   Timer,
@@ -12,12 +12,12 @@ import {
 
 ---
 
-## OutterPromise
+## OuterPromise
 
 把 Promise 的 `resolve` / `reject` 暴露到外部，适合做回调桥接。
 
 ```ts
-const [resolve, reject, promise] = OutterPromise<number>()
+const [resolve, reject, promise] = OuterPromise<number>()
 
 resolve(42)
 await promise // 42
@@ -26,7 +26,7 @@ await promise // 42
 不传类型参数时类型为 `void`：
 
 ```ts
-const [ok, fail, p] = OutterPromise()
+const [ok, fail, p] = OuterPromise()
 fail(new Error('nope'))
 await p.catch(e => console.log(e.message)) // nope
 ```
@@ -36,13 +36,13 @@ await p.catch(e => console.log(e.message)) // nope
 | 项 | 说明 |
 | --- | --- |
 | 返回 | `readonly [resolve, reject, promise]` |
-| 泛型 | `OutterPromise<T>()`；默认 `T = void` |
+| 泛型 | `OuterPromise<T>()`；默认 `T = void` |
 
 ---
 
 ## Wait
 
-`OutterPromise` 的语义化封装：`Wait()` 返回 `[waiting, go, cancel]`。
+`OuterPromise` 的语义化封装：`Wait()` 返回 `[waiting, go, cancel]`。
 
 ```ts
 const [waiting, go, cancel] = Wait<string>()
@@ -97,25 +97,17 @@ await nextTick()
 
 ## Timer
 
-`setTimeout` 的可取消封装。
+`Timer(clock, onTimeout)` 是一个有状态的单次定时器：
 
 ```ts
-const cancel = Timer(1000, () => console.log('1s later'))
-cancel() // 取消，回调不再执行
+const timer = Timer(Date.now, () => console.log('timeout'))
+timer.set(1000)
+timer.countdown()
+timer.elapsedTime()
+timer.cancel()
 ```
 
-**API**
-
-| 项 | 说明 |
-| --- | --- |
-| 参数 | `(ms: number, fn: () => void)` |
-| 返回 | `() => void`，调用即取消 |
-| 类型 | `CancelTimer` |
-
-**细节**
-
-- 只执行一次，不重复。
-- 重复调用取消函数是安全的（底层 `clearTimeout` 幂等）。
+完整的 API、状态、校验规则与示例见 [定时器](./timer.md)。
 
 ---
 
@@ -137,9 +129,9 @@ rejectTimeout(t)    // t 立刻以 TimeoutRejected 拒绝，并清除定时器
 
 **细节**
 
-- `rejectTimeout` 对**非`timeout` 创建的 Promise 是空操作**（内部用 `WeakMap` 记录）。
+- `rejectTimeout` 对**非 `timeout` 创建的 Promise 是空操作**（内部用 `WeakMap` 记录）。
 - 被取消时会 `clearTimeout`，不会残留定时器。
-- 拒绝错误的类型是 `TimeoutRejected`，其 `cause` 为 `rejectTimeout` 的入参。
+- 拒绝错误的类型是 `TimeoutRejected`。
 - 已经 resolve 之后调用 `rejectTimeout` 不会改变结果。
 
 ---
@@ -171,6 +163,7 @@ import { Wait } from 'vait'
 
 const [waiting, done, cancel] = Wait<string>()
 
+// socket 为外部对象占位
 socket.on('message', done)
 socket.on('close', () => cancel(new Error('socket closed')))
 

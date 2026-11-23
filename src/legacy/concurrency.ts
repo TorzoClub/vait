@@ -1,6 +1,6 @@
-import { Memo, WithValidating } from './memo'
-import { nextTick } from './next-tick';
-import { Wait } from './wait'
+import { Memo, WithValidating } from '../memo'
+import { nextTick } from '../next-tick';
+import { Wait } from '../wait'
 
 const NONE_ERROR = Symbol('NONE_ERROR')
 

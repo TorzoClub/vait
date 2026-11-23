@@ -1,4 +1,4 @@
-import { OutterPromise } from './outter-promise'
+import { OuterPromise } from './outer-promise'
 
 type Go<T> = (v: T) => void
 type RejectWaiting = (reason?: unknown) => void
@@ -11,7 +11,7 @@ export type Wait<T = void> = readonly [Waiting<T>, Go<T>, RejectWaiting]
 export function Wait(): Wait
 export function Wait<T>(): Wait<T>
 export function Wait<T>() {
-  const [ resolve, reject, promise ] = OutterPromise<T>()
+  const [ resolve, reject, promise ] = OuterPromise<T>()
   return [
     promise,
     resolve,

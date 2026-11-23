@@ -1,5 +1,5 @@
 import { ExecuteHandlers, Handler, Handlers } from '../signal'
-import { removeByItem } from '../utils'
+import { removeByItem } from '../internal/utils'
 
 interface Event<EventSetting> {
   isEmpty(evname: keyof EventSetting): boolean

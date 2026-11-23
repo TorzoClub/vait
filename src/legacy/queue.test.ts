@@ -4,7 +4,7 @@ import { timeout } from '../timeout'
 import { Wait } from '../wait'
 import { Memo } from '../memo'
 import { Signal } from '../signal'
-import { concurrency } from '../concurrency'
+import { concurrency } from './concurrency'
 import { nextTick } from '../next-tick'
 
 test('runTask (Queue', async () => {

@@ -1,9 +1,9 @@
-# 任务队列：Queue（遗留）
+# 任务队列：Queue（Legacy）
 
-> **遗留模块**：`Queue` 的源码已移至 `src/legacy/queue.ts`，仍从包入口导出（`import { Queue } from 'vait'` 不受影响），但不再主动演进。
-> 新代码推荐使用 [`Conveyor`](../src/conveyor.ts)：它在 `Queue` 的基础上提供积压上限（背压）、等待 / 处理超时、`retire` 与结构化结果。
+> **Legacy 模块**：`Queue` 的源码位于 `src/legacy/queue.ts`，仍从包入口导出（`import { Queue } from 'vait'` 不受影响），但不再主动演进。
+> 新代码优先使用 [`Conveyor`](../conveyor.md)。`Conveyor` 与 `Queue` 是独立实现；`Conveyor` 提供积压上限（背压）、等待 / 处理超时、`retire` 与结构化结果。
 
-`Queue` 是一个带并发上限的任务队列：任务入队后按顺序执行，可动态调整并发、监听生命周期、给任务附加 payload。
+`Queue` 是一个带并发上限的任务队列：任务按入队顺序取出，可动态调整并发、监听生命周期、给任务附加 payload。
 
 ```ts
 import { Queue, QueueSignal, WithPayload, runTask, timeout } from 'vait'
@@ -64,11 +64,13 @@ const q = Queue()
 const result = await runTask(q, async () => 233)
 console.log(result) // 233
 
-// 任务抛错会向调用方 reject
+// 任务返回的 Promise reject 时会向调用方 reject
 await runTask(q, async () => { throw new Error('boom') }).catch(e => {
   console.log(e.message) // boom
 })
 ```
+
+任务函数返回的 Promise reject 时，`runTask` 返回的 Promise 会以同一原因 reject。若任务函数**同步 throw**，`Queue` 会捕获并触发 `ERROR` 信号（若队列带信号），但 `runTask` 返回的 Promise 不会 reject；需要统一错误处理时，应使用 `async` 任务函数。
 
 带 payload 的队列有对应重载：
 
@@ -85,7 +87,7 @@ console.log(q.getPayload(task)) // 9
 
 ## 状态与生命周期
 
-- 初始状态为 `'pause'`；有任务入队后变为 `'running'`。
+- 初始状态为 `'pause'`；通过 `task` 入队后变为 `'running'`。
 - 队列耗尽后回到 `'pause'`，并触发一次 `ALL_DONE`。
 - 正在执行的任务不在 `getTasks()` 中（被取出时即从列表移除）。
 
@@ -171,9 +173,6 @@ const q = WithPayload<number>(Queue())
 
 q.task(1, async () => { /* ... */ })
 q.task(2, async () => { /* ... */ })
-
-// 在信号回调里反查某任务的 payload
-q.signal // 普通 Queue 没有信号；需配合 QueueSignal
 ```
 
 配合信号使用：
@@ -200,15 +199,18 @@ q.task(7, async () => { throw new Error('boom') })
 | `setPayload(fn, payload)` | 手动设置 |
 | `payload_map` | 底层 `WeakMap` |
 
+`QueueError` 在 `getPayload` 找不到任务对应的 payload 时抛出。
+
 > payload 存在 `WeakMap` 中，任务函数被回收后映射也随之消失。
 
 ---
 
-## 细节与陷阱
+## 边界与限制
 
-1. **`task` 返回 `void`**：`const p = q.task(...)` 拿到的不是 Promise。要等待结果请用 `runTask`。
+1. **`task` 返回 `void`**：`const p = q.task(...)` 拿到的不是 Promise。需要等待结果时应使用 `runTask`。
 2. **任务在微任务后执行**：`q.task(fn)` 之后同步读取状态已是 `'running'`，但任务函数体尚未运行。
-3. **`setMaxConcurrent` 会校验**：必须是非负整数或 `Infinity`，否则抛 `RangeError` / `TypeError`；设为 `0` 可暂停派发新任务。
-4. **动态改并发立即生效**：增大则补派任务，减小则等正在执行的任务自然结束后不再补派。
-5. **`setTasks` 直接替换**：配合 `WILL_PROCESS` 可实现“排空前的撤销 / 过滤”。
-6. **`ALL_DONE` 可能触发多次**：一次“排空”触发一次；之后继续投递任务，再次排空会再次触发。
+3. **`setMaxConcurrent` 会校验**：必须是非负整数或 `Infinity`，否则抛 `RangeError` / `TypeError`；设为 `0` 可暂停派发新任务。并发上限的变化在下一个微任务继续派发（内部使用 `Memo.watch` + `nextTick`），不是同步生效。
+4. **`setTasks` 是纯 setter**：它只替换待执行任务列表，不会启动处于 `pause` 的队列；需要入队并启动时应使用 `task`。
+5. **`getTasks` 返回内部数组**：外部直接修改会影响内部状态；需要快照时应使用 `[...q.getTasks()]`。
+6. **`setTasks` 配合 `WILL_PROCESS`**：可在取出任务前实现撤销 / 过滤。
+7. **`ALL_DONE` 可能触发多次**：一次排空触发一次；之后继续投递任务，再次排空会再次触发。

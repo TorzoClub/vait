@@ -1,4 +1,4 @@
-import { OutterPromise } from './outter-promise'
+import { OuterPromise } from './outer-promise'
 import { Timer } from './timer'
 
 type RejectTiemout = (reason?: unknown) => void
@@ -18,10 +18,11 @@ export function rejectTimeout(waiting: TimeoutWaiting) {
 export class TimeoutRejected extends Error {}
 
 export function timeout(ms: number) {
-  const [ resolve, reject, waiting ] = OutterPromise<void>()
-  const cancelTimer = Timer(ms, resolve)
+  const [ resolve, reject, waiting ] = OuterPromise<void>()
+  const timer = Timer(Date.now, resolve)
+  timer.set(ms)
   handlers.set(waiting, (cause) => {
-    cancelTimer()
+    timer.cancel()
     reject(new TimeoutRejected('timeout cancel', { cause }))
   })
   return waiting

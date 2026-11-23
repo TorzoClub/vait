@@ -4,7 +4,7 @@ import { defineConfig } from 'vite'
 
 export default defineConfig({
   build: {
-    target: 'es2020',
+    target: 'es2023',
     sourcemap: true,
     minify: false,
     emptyOutDir: true,

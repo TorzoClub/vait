@@ -1,4 +1,4 @@
-import { AbortType, Conveyor, ConveyorInstance, ConveyorSendResult } from "../conveyor"
+import { AbortCause, Conveyor, ConveyorInstance, ConveyorSendResult } from "../conveyor"
 import { Signal } from "../signal"
 
 export function Traffic<Payload, R, Return = void>(
@@ -27,7 +27,7 @@ export function Traffic<Payload, R, Return = void>(
 async function sendToChild<Payload, R>(
   child: ConveyorInstance<Payload, R>,
   payload: Payload,
-  abort_signal: Signal<AbortType>
+  abort_signal: Signal<AbortCause>
 ): Promise<ConveyorSendResult<R>> {
   const child_promise = child.send(payload)
   const child_task_id = Conveyor.getTaskIDByPromise(child_promise)
@@ -65,12 +65,12 @@ const tra = Traffic(function *(payload: 'asd' | 'abc') {
   if (payload === 'asd') {
     const result = yield road_a
     // result: ConveyorSendResult<void>
-    if (result.type === 'done') {
+    if (result.scene === 'done') {
       // 子任务成功
     }
   } else {
     const result = yield road_b
-    result.type
+    result.scene
   }
 })
 
@@ -78,7 +78,7 @@ const tra = Traffic(function *(payload: 'asd' | 'abc') {
 tra.setValve(Infinity)
 
 tra.send('asd').then(result => {
-  if (result.type === 'done') {
+  if (result.scene === 'done') {
     // result.return_value 是 generator 的返回值（这里默认 void）
   }
 })
