@@ -1,4 +1,4 @@
-import { Memo, WithValidating } from "./memo"
+import { Memo } from "./memo"
 import { OuterPromise } from "./outer-promise"
 import { Signal } from "./signal"
 import { ConveyorTimer } from "./internal/conveyor-timer"
@@ -119,28 +119,6 @@ export type ConveyorInstance<Payload, ProcessorReturn> = Readonly<{
   signals: ConveyorSignals<Payload>
 }>
 
-type Valve = {
-  get(): number;
-  set(v: number): void
-  memo: Memo<number>
-}
-
-const Valve = (v: number): Valve => {
-  const memo = WithValidating(Memo(v), v => {
-    if (v !== Infinity && !Number.isInteger(v)) {
-      throw new TypeError('concurrent_limit should be integer or Infinity')
-    } else if (v < 0) {
-      throw new RangeError('concurrent_limit should >= 0')
-    }
-  })
-
-  return {
-    get: Memo.getGetter(memo),
-    set: Memo.getSetter(memo),
-    memo,
-  }
-}
-
 function allocTaskID(): TaskID {
   return Symbol('Conveyor Task ID') as unknown as TaskID
 }
@@ -183,12 +161,8 @@ Conveyor.getTaskIDByPromise = getTaskIDByPromise
 export function Conveyor<Payload, ProcessorReturn>(
   processor: Processor<Payload, ProcessorReturn>
 ): ConveyorInstance<Payload, ProcessorReturn> {
-  const destroyMemo = Memo(false)
   const sig_destroyed = Signal()
-  Memo.watch(destroyMemo, d => {
-    if (d) { sig_destroyed.trigger() }
-  })
-  const [isDestroy, setDestroy] = destroyMemo as [ () => boolean, (b: true) => void ]
+  const [isDestroy, setDestroy] = Memo(false) as unknown as [ () => boolean, (b: true) => void ]
   const WithDestroy = Guard(isDestroy)(() => {
     throw new ConveyorError('Internal', 'This Conveyor is destroyed', {})
   })
@@ -204,7 +178,7 @@ export function Conveyor<Payload, ProcessorReturn>(
   const waitingTimer = ConveyorTimer<TaskID>()
   const processingTimer = ConveyorTimer<TaskID>()
 
-  const valve = Valve(conveyor_defaults.valve)
+  const [getValve, __setValve] = Memo<number>(conveyor_defaults.valve)
   const [getBacklogsLimit, setBacklogsLimitMemo] = Memo(conveyor_defaults.backlogs_limit)
   const backlogsMemo = Memo<Task<Payload>[]>([])
   const [getBacklogs, setBacklogs] = backlogsMemo
@@ -253,7 +227,7 @@ export function Conveyor<Payload, ProcessorReturn>(
   function startProcessing() {
     if (isDestroy()) { return }
 
-    const concurrency = valve.get()
+    const concurrency = getValve()
     const tasks = getBacklogs()
 
     if (tasks.length === 0) { return }
@@ -373,7 +347,7 @@ export function Conveyor<Payload, ProcessorReturn>(
       return 'destroyed'
     } else {
       const is_working = isWorking()
-      if (valve.get() === 0) {
+      if (getValve() === 0) {
         return is_working ? 'working/in_paused' : 'paused'
       } else if (is_working) {
         return isSwamped() ? 'working/swamped' : 'working/controlled'
@@ -464,27 +438,34 @@ export function Conveyor<Payload, ProcessorReturn>(
   }
 
   function destroyConveyor() {
-    if (isDestroy()) { return }
+    if (!isDestroy()) {
+      for (const task of getBacklogs()) {
+        waitingTimer.stop(task.id)
+        setTaskStatus(task.id, 'destroyed/in_waiting')
+      }
 
-    for (const task of getBacklogs()) {
-      waitingTimer.stop(task.id)
-      setTaskStatus(task.id, 'destroyed/in_waiting')
+      waitingTimer.clear()
+      processingTimer.clear()
+      processing_slots.clear()
+
+      setBacklogs([])
+      setDestroy(true)
+      sig_destroyed.trigger()
     }
-
-    waitingTimer.clear()
-    processingTimer.clear()
-    processing_slots.clear()
-
-    setBacklogs([])
-    setDestroy(true)
   }
 
   return Object.freeze({
     signals,
 
-    setValve: WithDestroy(n => {
-      valve.set(n)
-      startProcessing()
+    setValve: WithDestroy(v => {
+      if (v !== Infinity && !Number.isInteger(v)) {
+        throw new TypeError('concurrent_limit should be integer or Infinity')
+      } else if (v < 0) {
+        throw new RangeError('concurrent_limit should >= 0')
+      } else {
+        __setValve(v)
+        startProcessing()
+      }
     }),
     setBacklogsLimit: WithDestroy(n => {
       assertBacklogsLimit(n)
